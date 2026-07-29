@@ -38,6 +38,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
 const el = {
   openRepo: $("open-repo"),
   openRepoEmpty: $("open-repo-empty"),
+  refresh: $("refresh"),
   repoName: $("repo-name"),
   repoPath: $("repo-path"),
   toggleDetails: $("toggle-details"),
@@ -461,6 +462,29 @@ async function openRepo(path: string): Promise<void> {
   await refreshGraph();
 }
 
+/// Re-read refs and commits from disk, keeping the current branch selection
+/// (minus refs that no longer exist; new branches start unchecked).
+async function refreshAll(): Promise<void> {
+  if (!state.repoPath) return;
+  try {
+    state.refs = await api.listRefs();
+  } catch (e) {
+    toast(`Refresh failed: ${e}`);
+    return;
+  }
+  const existing = new Set(
+    [...state.refs.locals, ...state.refs.remotes].map((b) => b.full_name),
+  );
+  state.enabled = new Set([...state.enabled].filter((r) => existing.has(r)));
+  persistEnabled();
+  renderSidebar();
+  await refreshGraph();
+  // The selected commit's refs/details may have changed (e.g. new tag).
+  if (state.selectedId && state.graph?.rows.some((r) => r.id === state.selectedId)) {
+    await selectCommit(state.selectedId);
+  }
+}
+
 async function chooseRepo(): Promise<void> {
   const dir = await openDialog({
     directory: true,
@@ -474,6 +498,7 @@ async function chooseRepo(): Promise<void> {
 function wire(): void {
   el.openRepo.addEventListener("click", () => void chooseRepo());
   el.openRepoEmpty.addEventListener("click", () => void chooseRepo());
+  el.refresh.addEventListener("click", () => void refreshAll());
   el.loadMore.addEventListener("click", () => {
     state.limit += PAGE;
     void refreshGraph();
@@ -553,6 +578,11 @@ function wire(): void {
 
   // Keyboard navigation.
   document.addEventListener("keydown", (ev) => {
+    if (ev.key === "F5") {
+      ev.preventDefault();
+      void refreshAll();
+      return;
+    }
     if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown") return;
     if ((ev.target as HTMLElement).tagName === "INPUT") return;
     const g = state.graph;
