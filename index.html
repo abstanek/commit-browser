@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Commit Browser</title>
+    <script type="module" src="/src/main.ts" defer></script>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header id="toolbar">
+        <button id="open-repo" class="btn">Open Repository…</button>
+        <div id="repo-title">
+          <span id="repo-name">No repository</span>
+          <span id="repo-path"></span>
+        </div>
+        <div class="spacer"></div>
+        <button id="toggle-details" class="btn" title="Show or hide the commit details pane">
+          Details
+        </button>
+      </header>
+
+      <aside id="sidebar">
+        <div class="section">
+          <div class="section-title">
+            <span>Branches</span>
+            <span class="section-actions">
+              <button class="linkbtn" id="locals-all">all</button>
+              <button class="linkbtn" id="locals-none">none</button>
+            </span>
+          </div>
+          <div class="ref-list" id="local-branches"></div>
+        </div>
+        <div class="section">
+          <div class="section-title">
+            <span>Remotes</span>
+            <span class="section-actions">
+              <button class="linkbtn" id="remotes-all">all</button>
+              <button class="linkbtn" id="remotes-none">none</button>
+            </span>
+          </div>
+          <div class="ref-list" id="remote-branches"></div>
+        </div>
+      </aside>
+
+      <main id="main">
+        <div id="commit-list">
+          <div id="list-scroll">
+            <div id="list-header">
+              <div class="cell graph-pad">Graph</div>
+              <div class="cell subject">Description</div>
+              <div class="cell author">Author</div>
+              <div class="cell date">Date</div>
+              <div class="cell sha">Commit</div>
+            </div>
+            <div id="rows-wrap">
+              <svg id="graph-svg"></svg>
+              <div id="rows"></div>
+            </div>
+            <button id="load-more" class="btn" hidden>Load more commits…</button>
+            <div id="list-empty" hidden>No commits — enable a branch on the left.</div>
+          </div>
+        </div>
+        <div id="splitter" hidden></div>
+        <section id="details" hidden>
+          <div id="detail-meta"></div>
+          <div id="detail-body">
+            <div id="file-list"></div>
+            <div id="diff-view"></div>
+          </div>
+        </section>
+      </main>
+
+      <div id="empty-state">
+        <div>
+          <h2>Commit Browser</h2>
+          <p>Open a git repository to browse its commit graph.</p>
+          <button id="open-repo-empty" class="btn primary">Open Repository…</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
