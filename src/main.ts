@@ -19,6 +19,8 @@ interface AppUiState {
   selectedId: string | null;
   details: CommitDetails | null;
   selectedFile: number;
+  /// Which pane arrow keys act on.
+  focus: "commits" | "files";
 }
 
 const state: AppUiState = {
@@ -30,6 +32,7 @@ const state: AppUiState = {
   selectedId: null,
   details: null,
   selectedFile: 0,
+  focus: "commits",
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
@@ -297,7 +300,28 @@ async function refreshGraph(): Promise<void> {
   renderCommitList();
 }
 
+function setFocus(f: "commits" | "files"): void {
+  state.focus = f;
+  el.listScroll.classList.toggle("pane-focus", f === "commits");
+  el.details.classList.toggle("pane-focus", f === "files");
+}
+
+function selectFile(i: number): void {
+  const files = state.details?.files ?? [];
+  if (files.length === 0) return;
+  state.selectedFile = Math.min(Math.max(0, i), files.length - 1);
+  for (const c of el.fileList.children) {
+    c.classList.toggle(
+      "selected",
+      (c as HTMLElement).dataset.i === String(state.selectedFile),
+    );
+  }
+  el.fileList.children[state.selectedFile]?.scrollIntoView({ block: "nearest" });
+  renderDiff();
+}
+
 async function selectCommit(id: string, scrollTo = false): Promise<void> {
+  setFocus("commits");
   state.selectedId = id;
   for (const row of el.rows.children) {
     row.classList.toggle("selected", (row as HTMLElement).dataset.id === id);
@@ -421,6 +445,7 @@ function setDetailsVisible(visible: boolean): void {
   el.splitter.hidden = !visible;
   el.toggleDetails.classList.toggle("active", visible);
   store.setDetailsVisible(visible);
+  if (!visible) setFocus("commits");
 }
 
 // ------------------------------------------------------------------ open repo
@@ -570,6 +595,9 @@ function wire(): void {
     renderSidebar();
   });
 
+  // Clicking anywhere in the commit list focuses it for arrow navigation.
+  el.listScroll.addEventListener("click", () => setFocus("commits"));
+
   // Row selection (delegated).
   el.rows.addEventListener("click", (ev) => {
     const row = (ev.target as HTMLElement).closest<HTMLElement>(".row");
@@ -585,27 +613,31 @@ function wire(): void {
     }
     if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown") return;
     if ((ev.target as HTMLElement).tagName === "INPUT") return;
+    const delta = ev.key === "ArrowDown" ? 1 : -1;
+
+    // When the details pane has focus, arrows move through the diff's files.
+    if (state.focus === "files" && !el.details.hidden && state.details?.files.length) {
+      selectFile(state.selectedFile + delta);
+      ev.preventDefault();
+      return;
+    }
+
     const g = state.graph;
     if (!g || g.rows.length === 0) return;
     const cur = g.rows.findIndex((r) => r.id === state.selectedId);
     const next =
-      cur === -1
-        ? 0
-        : Math.min(g.rows.length - 1, Math.max(0, cur + (ev.key === "ArrowDown" ? 1 : -1)));
+      cur === -1 ? 0 : Math.min(g.rows.length - 1, Math.max(0, cur + delta));
     if (next !== cur) void selectCommit(g.rows[next].id, true);
     ev.preventDefault();
   });
 
   // File list selection + parent links (delegated).
   el.fileList.addEventListener("click", (ev) => {
+    setFocus("files");
     const item = (ev.target as HTMLElement).closest<HTMLElement>(".file-item");
-    if (!item) return;
-    state.selectedFile = Number(item.dataset.i);
-    for (const c of el.fileList.children) {
-      c.classList.toggle("selected", c === item);
-    }
-    renderDiff();
+    if (item) selectFile(Number(item.dataset.i));
   });
+  el.diffView.addEventListener("click", () => setFocus("files"));
   el.detailMeta.addEventListener("click", (ev) => {
     const link = (ev.target as HTMLElement).closest<HTMLElement>(".parent-link");
     if (link?.dataset.id) {
@@ -641,6 +673,7 @@ async function init(): Promise<void> {
   wire();
   applyTheme();
   applySectionCollapse();
+  setFocus("commits");
   el.branchSort.value = store.branchSort();
   el.details.style.height = `${store.detailsHeight()}px`;
   setDetailsVisible(store.detailsVisible());

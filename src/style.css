@@ -354,6 +354,11 @@ body {
   position: relative;
 }
 
+/* Slim accent stripe marking the pane that arrow keys act on. */
+.pane-focus {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
 #list-header,
 .row {
   display: grid;
