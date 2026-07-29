@@ -119,6 +119,13 @@ const store = {
   setCollapsedFor(repo: string, remotes: string[]) {
     localStorage.setItem(`collapsed:${repo}`, JSON.stringify(remotes));
   },
+  collapsedSections(): Set<string> {
+    const raw = localStorage.getItem("collapsedSections");
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  },
+  setCollapsedSections(sections: Set<string>) {
+    localStorage.setItem("collapsedSections", JSON.stringify([...sections]));
+  },
 };
 
 type BranchSort = "recent" | "name";
@@ -149,14 +156,28 @@ function sortBranches(branches: BranchInfo[]): BranchInfo[] {
 }
 
 function refItemHtml(b: BranchInfo, label: string, isHead: boolean): string {
-  const checked = state.enabled.has(b.full_name) ? "checked" : "";
+  const checked = state.enabled.has(b.full_name);
   return (
     `<label class="ref-item${isHead ? " head" : ""}" title="${escapeHtml(b.full_name)}">` +
-    `<input type="checkbox" data-ref="${escapeHtml(b.full_name)}" ${checked}/>` +
+    `<input type="checkbox" data-ref="${escapeHtml(b.full_name)}" ${checked ? "checked" : ""}/>` +
     `<span class="ref-name">${escapeHtml(label)}</span>` +
     (isHead ? `<span class="head-dot" title="Current branch">●</span>` : "") +
+    (checked
+      ? `<button class="jump-btn" data-target="${b.target}" ` +
+        `title="Jump to head of ${escapeHtml(b.name)}">⌖</button>`
+      : "") +
     `</label>`
   );
+}
+
+function applySectionCollapse(): void {
+  const collapsed = store.collapsedSections();
+  for (const sec of document.querySelectorAll<HTMLElement>(".section[data-section]")) {
+    const isCollapsed = collapsed.has(sec.dataset.section!);
+    sec.querySelector(".section-body")?.toggleAttribute("hidden", isCollapsed);
+    const d = sec.querySelector(".section-toggle .disclosure");
+    if (d) d.textContent = isCollapsed ? "▸" : "▾";
+  }
 }
 
 function collapsedRemotes(): Set<string> {
@@ -293,6 +314,22 @@ async function selectCommit(id: string, scrollTo = false): Promise<void> {
     state.details = null;
   }
   renderDetails();
+}
+
+/// Select a commit that may lie beyond the currently loaded page: keep
+/// extending the walk until its row exists, then select and scroll to it.
+async function jumpToCommit(id: string): Promise<void> {
+  let guard = 0;
+  while (
+    state.graph &&
+    state.graph.has_more &&
+    !state.graph.rows.some((r) => r.id === id) &&
+    guard++ < 50
+  ) {
+    state.limit += PAGE;
+    await refreshGraph();
+  }
+  await selectCommit(id, true);
 }
 
 // -------------------------------------------------------------- details pane
@@ -451,7 +488,32 @@ function wire(): void {
       if (cb.checked) state.enabled.add(ref);
       else state.enabled.delete(ref);
       persistEnabled();
+      renderSidebar(); // add/remove the jump-to-head icon
       void refreshGraph();
+    });
+  }
+
+  // Jump-to-branch-head icons (delegated across both lists). preventDefault
+  // stops the surrounding <label> from also toggling the checkbox.
+  $("sidebar").addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLElement>(".jump-btn");
+    if (!btn?.dataset.target) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    void jumpToCommit(btn.dataset.target);
+  });
+
+  // Collapsible Branches/Remotes sections.
+  for (const toggle of document.querySelectorAll<HTMLElement>(".section-toggle")) {
+    toggle.addEventListener("click", () => {
+      const sec = toggle.closest<HTMLElement>(".section[data-section]");
+      if (!sec) return;
+      const collapsed = store.collapsedSections();
+      const id = sec.dataset.section!;
+      if (collapsed.has(id)) collapsed.delete(id);
+      else collapsed.add(id);
+      store.setCollapsedSections(collapsed);
+      applySectionCollapse();
     });
   }
   $("locals-all").addEventListener("click", () => setAll(state.refs?.locals ?? [], true));
@@ -548,6 +610,7 @@ function wire(): void {
 async function init(): Promise<void> {
   wire();
   applyTheme();
+  applySectionCollapse();
   el.branchSort.value = store.branchSort();
   el.details.style.height = `${store.detailsHeight()}px`;
   setDetailsVisible(store.detailsVisible());

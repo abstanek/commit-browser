@@ -42,25 +42,25 @@
             <option value="name">Name</option>
           </select>
         </div>
-        <div class="section">
+        <div class="section" data-section="locals">
           <div class="section-title">
-            <span>Branches</span>
+            <span class="section-toggle"><span class="disclosure">▾</span>Branches</span>
             <span class="section-actions">
               <button class="linkbtn" id="locals-all">all</button>
               <button class="linkbtn" id="locals-none">none</button>
             </span>
           </div>
-          <div class="ref-list" id="local-branches"></div>
+          <div class="ref-list section-body" id="local-branches"></div>
         </div>
-        <div class="section">
+        <div class="section" data-section="remotes">
           <div class="section-title">
-            <span>Remotes</span>
+            <span class="section-toggle"><span class="disclosure">▾</span>Remotes</span>
             <span class="section-actions">
               <button class="linkbtn" id="remotes-all">all</button>
               <button class="linkbtn" id="remotes-none">none</button>
             </span>
           </div>
-          <div class="ref-list" id="remote-branches"></div>
+          <div class="ref-list section-body" id="remote-branches"></div>
         </div>
       </aside>
 

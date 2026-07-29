@@ -237,6 +237,35 @@ body {
   color: var(--text-dim);
 }
 
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.section-toggle:hover {
+  color: var(--text);
+}
+
+.jump-btn {
+  flex: none;
+  border: none;
+  background: none;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 3px;
+  border-radius: 3px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.jump-btn:hover {
+  color: var(--accent);
+  background: var(--btn-active-bg);
+}
+
 .ref-item {
   display: flex;
   align-items: center;
