@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Commit Browser</title>
+    <script>
+      // Resolve theme before first paint to avoid a flash of the wrong mode.
+      (() => {
+        const p = localStorage.getItem("theme");
+        document.documentElement.dataset.theme =
+          p === "light" || p === "dark"
+            ? p
+            : matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+      })();
+    </script>
     <script type="module" src="/src/main.ts" defer></script>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -16,12 +28,20 @@
           <span id="repo-path"></span>
         </div>
         <div class="spacer"></div>
+        <button id="theme-toggle" class="btn" title="Cycle theme: follow system / light / dark"></button>
         <button id="toggle-details" class="btn" title="Show or hide the commit details pane">
           Details
         </button>
       </header>
 
       <aside id="sidebar">
+        <div class="sidebar-controls">
+          <label for="branch-sort">Sort</label>
+          <select id="branch-sort">
+            <option value="recent">Most recent commit</option>
+            <option value="name">Name</option>
+          </select>
+        </div>
         <div class="section">
           <div class="section-title">
             <span>Branches</span>

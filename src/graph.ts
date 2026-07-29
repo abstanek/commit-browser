@@ -5,18 +5,8 @@ export const COL_W = 14;
 const PAD_L = 8;
 const NODE_R = 4;
 
-export const PALETTE = [
-  "#2f6fe4",
-  "#d9822b",
-  "#38a05c",
-  "#c74a4a",
-  "#8657c9",
-  "#2a9d9f",
-  "#c94f9e",
-  "#7a8c1e",
-  "#5b6ee1",
-  "#b3763a",
-];
+/// Lane colours live in CSS (--lane-0 … --lane-9) so they follow the theme.
+export const LANE_COLORS = 10;
 
 export function graphWidthPx(columns: number): number {
   return PAD_L + Math.max(columns, 1) * COL_W + 8;
@@ -31,7 +21,7 @@ function cy(row: number): number {
 }
 
 function color(idx: number): string {
-  return PALETTE[idx % PALETTE.length];
+  return `var(--lane-${idx % LANE_COLORS})`;
 }
 
 /** Render the whole graph column as SVG inner markup. */

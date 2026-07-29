@@ -33,6 +33,10 @@ pub struct BranchInfo {
     pub name: String,
     pub full_name: String,
     pub target: String,
+    /// Committer time of the tip commit, unix seconds.
+    pub tip_time: i64,
+    /// For remote-tracking branches, the remote this branch belongs to.
+    pub remote: Option<String>,
 }
 
 #[derive(Serialize, Debug)]
@@ -122,6 +126,10 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
     let repo = Repository::open(repo_path).map_err(err)?;
     let mut locals = Vec::new();
     let mut remotes = Vec::new();
+    let remote_names: Vec<String> = repo
+        .remotes()
+        .map(|arr| arr.iter().flatten().map(str::to_string).collect())
+        .unwrap_or_default();
 
     for r in repo.references().map_err(err)? {
         let r = match r {
@@ -134,10 +142,29 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
         }
         let Ok(commit) = r.peel_to_commit() else { continue };
         let target = commit.id().to_string();
+        let tip_time = commit.time().seconds();
         if let Some(short) = full.strip_prefix("refs/heads/") {
-            locals.push(BranchInfo { name: short.to_string(), full_name: full.clone(), target });
+            locals.push(BranchInfo {
+                name: short.to_string(),
+                full_name: full.clone(),
+                target,
+                tip_time,
+                remote: None,
+            });
         } else if let Some(short) = full.strip_prefix("refs/remotes/") {
-            remotes.push(BranchInfo { name: short.to_string(), full_name: full.clone(), target });
+            // Match against configured remotes rather than splitting on "/",
+            // since branch names may themselves contain slashes.
+            let remote = remote_names
+                .iter()
+                .find(|rn| short.strip_prefix(rn.as_str()).is_some_and(|s| s.starts_with('/')))
+                .cloned();
+            remotes.push(BranchInfo {
+                name: short.to_string(),
+                full_name: full.clone(),
+                target,
+                tip_time,
+                remote,
+            });
         }
     }
     locals.sort_by(|a, b| a.name.cmp(&b.name));

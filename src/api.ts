@@ -10,6 +10,8 @@ export interface BranchInfo {
   name: string;
   full_name: string;
   target: string;
+  tip_time: number;
+  remote: string | null;
 }
 
 export interface RefsResult {

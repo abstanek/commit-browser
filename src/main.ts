@@ -41,6 +41,8 @@ const el = {
   repoName: $("repo-name"),
   repoPath: $("repo-path"),
   toggleDetails: $("toggle-details"),
+  themeToggle: $("theme-toggle"),
+  branchSort: $<HTMLSelectElement>("branch-sort"),
   localBranches: $("local-branches"),
   remoteBranches: $("remote-branches"),
   commitList: $("commit-list"),
@@ -102,34 +104,103 @@ const store = {
   setDetailsVisible: (v: boolean) => localStorage.setItem("detailsVisible", v ? "1" : "0"),
   detailsHeight: (): number => Number(localStorage.getItem("detailsHeight") ?? 320),
   setDetailsHeight: (h: number) => localStorage.setItem("detailsHeight", String(h)),
+  branchSort: (): BranchSort =>
+    localStorage.getItem("branchSort") === "name" ? "name" : "recent",
+  setBranchSort: (s: BranchSort) => localStorage.setItem("branchSort", s),
+  theme: (): ThemePref => {
+    const t = localStorage.getItem("theme");
+    return t === "light" || t === "dark" ? t : "system";
+  },
+  setTheme: (t: ThemePref) => localStorage.setItem("theme", t),
+  collapsedFor(repo: string): string[] {
+    const raw = localStorage.getItem(`collapsed:${repo}`);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  },
+  setCollapsedFor(repo: string, remotes: string[]) {
+    localStorage.setItem(`collapsed:${repo}`, JSON.stringify(remotes));
+  },
 };
+
+type BranchSort = "recent" | "name";
+type ThemePref = "system" | "light" | "dark";
+
+// --------------------------------------------------------------------- theme
+
+const darkMedia = window.matchMedia("(prefers-color-scheme: dark)");
+
+function applyTheme(): void {
+  const pref = store.theme();
+  const effective = pref === "system" ? (darkMedia.matches ? "dark" : "light") : pref;
+  document.documentElement.dataset.theme = effective;
+  el.themeToggle.textContent =
+    pref === "system" ? "Theme: Auto" : pref === "light" ? "Theme: Light" : "Theme: Dark";
+}
 
 // ------------------------------------------------------------------- sidebar
 
-function renderBranchList(
-  container: HTMLElement,
-  branches: BranchInfo[],
-  headBranch: string | null,
-): void {
-  container.innerHTML = branches
-    .map((b) => {
-      const checked = state.enabled.has(b.full_name) ? "checked" : "";
-      const isHead = headBranch !== null && b.name === headBranch;
-      return (
-        `<label class="ref-item${isHead ? " head" : ""}" title="${escapeHtml(b.full_name)}">` +
-        `<input type="checkbox" data-ref="${escapeHtml(b.full_name)}" ${checked}/>` +
-        `<span class="ref-name">${escapeHtml(b.name)}</span>` +
-        (isHead ? `<span class="head-dot" title="Current branch">●</span>` : "") +
-        `</label>`
-      );
-    })
-    .join("");
+function sortBranches(branches: BranchInfo[]): BranchInfo[] {
+  const copy = [...branches];
+  if (store.branchSort() === "recent") {
+    copy.sort((a, b) => b.tip_time - a.tip_time || a.name.localeCompare(b.name));
+  } else {
+    copy.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  return copy;
+}
+
+function refItemHtml(b: BranchInfo, label: string, isHead: boolean): string {
+  const checked = state.enabled.has(b.full_name) ? "checked" : "";
+  return (
+    `<label class="ref-item${isHead ? " head" : ""}" title="${escapeHtml(b.full_name)}">` +
+    `<input type="checkbox" data-ref="${escapeHtml(b.full_name)}" ${checked}/>` +
+    `<span class="ref-name">${escapeHtml(label)}</span>` +
+    (isHead ? `<span class="head-dot" title="Current branch">●</span>` : "") +
+    `</label>`
+  );
+}
+
+function collapsedRemotes(): Set<string> {
+  return new Set(state.repoPath ? store.collapsedFor(state.repoPath) : []);
 }
 
 function renderSidebar(): void {
   if (!state.refs) return;
-  renderBranchList(el.localBranches, state.refs.locals, state.refs.head_branch);
-  renderBranchList(el.remoteBranches, state.refs.remotes, null);
+  const head = state.refs.head_branch;
+  el.localBranches.innerHTML = sortBranches(state.refs.locals)
+    .map((b) => refItemHtml(b, b.name, head !== null && b.name === head))
+    .join("");
+
+  // Remote branches grouped by remote; sort applies within each group.
+  const groups = new Map<string, BranchInfo[]>();
+  for (const b of state.refs.remotes) {
+    const remote = b.remote ?? "(unknown)";
+    let g = groups.get(remote);
+    if (!g) groups.set(remote, (g = []));
+    g.push(b);
+  }
+  const collapsed = collapsedRemotes();
+  el.remoteBranches.innerHTML = [...groups.keys()]
+    .sort((a, b) => a.localeCompare(b))
+    .map((remote) => {
+      const isCollapsed = collapsed.has(remote);
+      const items = sortBranches(groups.get(remote)!)
+        .map((b) => {
+          const label = b.remote ? b.name.slice(b.remote.length + 1) : b.name;
+          return refItemHtml(b, label, false);
+        })
+        .join("");
+      return (
+        `<div class="remote-group${isCollapsed ? " collapsed" : ""}">` +
+        `<div class="remote-header" data-remote="${escapeHtml(remote)}">` +
+        `<span class="disclosure">${isCollapsed ? "▸" : "▾"}</span>` +
+        `<span class="remote-name">${escapeHtml(remote)}</span>` +
+        `<span class="remote-count">${groups.get(remote)!.length}</span>` +
+        `</div>` +
+        `<div class="remote-items"${isCollapsed ? " hidden" : ""}>${items}</div>` +
+        `</div>`
+      );
+    })
+    .join("");
 }
 
 function persistEnabled(): void {
@@ -388,6 +459,30 @@ function wire(): void {
   $("remotes-all").addEventListener("click", () => setAll(state.refs?.remotes ?? [], true));
   $("remotes-none").addEventListener("click", () => setAll(state.refs?.remotes ?? [], false));
 
+  el.branchSort.addEventListener("change", () => {
+    store.setBranchSort(el.branchSort.value as BranchSort);
+    renderSidebar();
+  });
+
+  el.themeToggle.addEventListener("click", () => {
+    const order: ThemePref[] = ["system", "light", "dark"];
+    const next = order[(order.indexOf(store.theme()) + 1) % order.length];
+    store.setTheme(next);
+    applyTheme();
+  });
+  darkMedia.addEventListener("change", applyTheme);
+
+  // Collapse/expand remote groups (delegated; ignore clicks on checkboxes).
+  el.remoteBranches.addEventListener("click", (ev) => {
+    const header = (ev.target as HTMLElement).closest<HTMLElement>(".remote-header");
+    if (!header?.dataset.remote || !state.repoPath) return;
+    const collapsed = collapsedRemotes();
+    if (collapsed.has(header.dataset.remote)) collapsed.delete(header.dataset.remote);
+    else collapsed.add(header.dataset.remote);
+    store.setCollapsedFor(state.repoPath, [...collapsed]);
+    renderSidebar();
+  });
+
   // Row selection (delegated).
   el.rows.addEventListener("click", (ev) => {
     const row = (ev.target as HTMLElement).closest<HTMLElement>(".row");
@@ -452,6 +547,8 @@ function wire(): void {
 
 async function init(): Promise<void> {
   wire();
+  applyTheme();
+  el.branchSort.value = store.branchSort();
   el.details.style.height = `${store.detailsHeight()}px`;
   setDetailsVisible(store.detailsVisible());
   renderDetails();

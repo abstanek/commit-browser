@@ -10,9 +10,92 @@
   --accent: #2f6fe4;
   --sel: #2f6fe4;
   --sel-text: #ffffff;
+  --hover: #eaf0fa;
+  --sidebar-hover: #e4e8ef;
+  --btn-bg: #ffffff;
+  --btn-hover: #f0f3f8;
+  --btn-active-bg: #e1e9f8;
+  --splitter-hover: #d9e4f5;
+  --chip-local-bg: #dbe9ff;
+  --chip-local-border: #9dbcf0;
+  --chip-local-fg: #1a4fad;
+  --chip-remote-bg: #efe4fb;
+  --chip-remote-border: #c9aae8;
+  --chip-remote-fg: #6d3caf;
+  --chip-tag-bg: #ddf3e0;
+  --chip-tag-border: #a4d6ac;
+  --chip-tag-fg: #1d7a30;
+  --diff-add-bg: #e6ffec;
+  --diff-del-bg: #ffebe9;
+  --diff-hunk-bg: #eef4fc;
+  --diff-hunk-fg: #0550ae;
+  --diff-meta-fg: #9aa2ab;
+  --stat-add: #2da44e;
+  --stat-del: #cf222e;
+  --toast-bg: #2d333b;
+  --toast-fg: #ffffff;
+  --lane-0: #2f6fe4;
+  --lane-1: #d9822b;
+  --lane-2: #38a05c;
+  --lane-3: #c74a4a;
+  --lane-4: #8657c9;
+  --lane-5: #2a9d9f;
+  --lane-6: #c94f9e;
+  --lane-7: #7a8c1e;
+  --lane-8: #5b6ee1;
+  --lane-9: #b3763a;
   font-family: -apple-system, "Segoe UI", Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
   font-size: 13px;
   color: var(--text);
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --bg-list: #0d1117;
+  --bg-alt: #151b23;
+  --bg-sidebar: #161b22;
+  --bg-toolbar: #161b22;
+  --border: #30363d;
+  --text: #d1d7de;
+  --text-dim: #8b949e;
+  --accent: #539bf5;
+  --sel: #1f6feb;
+  --sel-text: #ffffff;
+  --hover: #1c2733;
+  --sidebar-hover: #21262e;
+  --btn-bg: #21262d;
+  --btn-hover: #30363d;
+  --btn-active-bg: #1b3a63;
+  --splitter-hover: #2c4a75;
+  --chip-local-bg: #142a4d;
+  --chip-local-border: #2f5eaa;
+  --chip-local-fg: #79b8ff;
+  --chip-remote-bg: #2b1f45;
+  --chip-remote-border: #6e40a8;
+  --chip-remote-fg: #c9a3f5;
+  --chip-tag-bg: #122e1a;
+  --chip-tag-border: #2f6f3f;
+  --chip-tag-fg: #56d364;
+  --diff-add-bg: rgba(63, 185, 80, 0.16);
+  --diff-del-bg: rgba(248, 81, 73, 0.16);
+  --diff-hunk-bg: rgba(56, 139, 253, 0.12);
+  --diff-hunk-fg: #79c0ff;
+  --diff-meta-fg: #6e7681;
+  --stat-add: #3fb950;
+  --stat-del: #f85149;
+  --toast-bg: #444c56;
+  --toast-fg: #ffffff;
+  --lane-0: #5b96f5;
+  --lane-1: #e8a04c;
+  --lane-2: #4fc57e;
+  --lane-3: #e06c6c;
+  --lane-4: #a47ae0;
+  --lane-5: #45bdbf;
+  --lane-6: #e070b8;
+  --lane-7: #a3b83c;
+  --lane-8: #7d8ef0;
+  --lane-9: #cf9459;
+  color-scheme: dark;
 }
 
 * {
@@ -77,17 +160,17 @@ body {
   padding: 5px 12px;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: #fff;
+  background: var(--btn-bg);
   color: var(--text);
   cursor: pointer;
 }
 
 .btn:hover {
-  background: #f0f3f8;
+  background: var(--btn-hover);
 }
 
 .btn.active {
-  background: #e1e9f8;
+  background: var(--btn-active-bg);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -118,6 +201,26 @@ body {
   padding: 10px 0;
 }
 
+.sidebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.sidebar-controls select {
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
 .section {
   margin-bottom: 14px;
 }
@@ -144,7 +247,7 @@ body {
 }
 
 .ref-item:hover {
-  background: #e4e8ef;
+  background: var(--sidebar-hover);
 }
 
 .ref-item.head .ref-name {
@@ -160,6 +263,42 @@ body {
 .head-dot {
   color: var(--accent);
   font-size: 9px;
+}
+
+.remote-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+}
+
+.remote-header:hover {
+  background: var(--sidebar-hover);
+}
+
+.disclosure {
+  width: 11px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.remote-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.remote-count {
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.remote-items .ref-item {
+  padding-left: 28px;
 }
 
 /* -------------------------------------------------------------- commit list */
@@ -231,7 +370,7 @@ body {
 }
 
 .row:hover {
-  background: #eaf0fa;
+  background: var(--hover);
 }
 
 .row.selected {
@@ -286,25 +425,25 @@ body {
 }
 
 .chip.local {
-  background: #dbe9ff;
-  border-color: #9dbcf0;
-  color: #1a4fad;
+  background: var(--chip-local-bg);
+  border-color: var(--chip-local-border);
+  color: var(--chip-local-fg);
 }
 
 .chip.remote {
-  background: #efe4fb;
-  border-color: #c9aae8;
-  color: #6d3caf;
+  background: var(--chip-remote-bg);
+  border-color: var(--chip-remote-border);
+  color: var(--chip-remote-fg);
 }
 
 .chip.tag {
-  background: #ddf3e0;
-  border-color: #a4d6ac;
-  color: #1d7a30;
+  background: var(--chip-tag-bg);
+  border-color: var(--chip-tag-border);
+  color: var(--chip-tag-fg);
 }
 
 .chip.chip-head {
-  box-shadow: 0 0 0 1.5px #9dbcf0;
+  box-shadow: 0 0 0 1.5px var(--chip-local-border);
 }
 
 #load-more {
@@ -330,7 +469,7 @@ body {
 }
 
 #splitter:hover {
-  background: #d9e4f5;
+  background: var(--splitter-hover);
 }
 
 #details {
@@ -411,7 +550,7 @@ body {
 }
 
 .file-item:hover {
-  background: #eaf0fa;
+  background: var(--hover);
 }
 
 .file-item.selected {
@@ -455,8 +594,8 @@ body {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
-.filestat.add { color: #2da44e; }
-.filestat.del { color: #cf222e; }
+.filestat.add { color: var(--stat-add); }
+.filestat.del { color: var(--stat-del); }
 
 #diff-view {
   flex: 1;
@@ -476,10 +615,10 @@ body {
   white-space: pre;
 }
 
-.dl.add { background: #e6ffec; }
-.dl.del { background: #ffebe9; }
-.dl.hunk { background: #eef4fc; color: #0550ae; }
-.dl.meta { color: #9aa2ab; }
+.dl.add { background: var(--diff-add-bg); }
+.dl.del { background: var(--diff-del-bg); }
+.dl.hunk { background: var(--diff-hunk-bg); color: var(--diff-hunk-fg); }
+.dl.meta { color: var(--diff-meta-fg); }
 
 .detail-empty {
   padding: 14px;
@@ -519,8 +658,8 @@ body {
   bottom: 16px;
   right: 16px;
   z-index: 100;
-  background: #2d333b;
-  color: #fff;
+  background: var(--toast-bg);
+  color: var(--toast-fg);
   padding: 9px 14px;
   border-radius: 6px;
   font-size: 12.5px;

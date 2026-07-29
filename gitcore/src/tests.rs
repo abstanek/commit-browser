@@ -70,13 +70,41 @@ fn ids(rows: &[GraphRow]) -> Vec<String> {
 
 #[test]
 fn open_and_list_refs() {
-    let (t, _) = sample();
+    let (t, oids) = sample();
     let info = open_repo(&t.path).unwrap();
     assert!(!info.name.is_empty());
     let refs = list_refs(&t.path).unwrap();
     let names: Vec<_> = refs.locals.iter().map(|b| b.name.as_str()).collect();
     assert_eq!(names, vec!["feature", "main", "topic"]);
     assert!(refs.remotes.is_empty());
+    // Tip times reflect commit order: feature (oids[2]) is older than main's tip.
+    let by_name = |n: &str| refs.locals.iter().find(|b| b.name == n).unwrap();
+    assert!(by_name("feature").tip_time < by_name("main").tip_time);
+    assert_eq!(by_name("main").target, oids[5].to_string());
+}
+
+#[test]
+fn remote_branches_grouped_by_remote() {
+    let (t, oids) = sample();
+    t.repo.remote("origin", "https://example.invalid/r.git").unwrap();
+    t.repo.remote("upstream", "https://example.invalid/u.git").unwrap();
+    t.repo
+        .reference("refs/remotes/origin/main", oids[5], true, "test")
+        .unwrap();
+    // Branch name containing a slash must still resolve to the right remote.
+    t.repo
+        .reference("refs/remotes/origin/feat/x", oids[2], true, "test")
+        .unwrap();
+    t.repo
+        .reference("refs/remotes/upstream/main", oids[4], true, "test")
+        .unwrap();
+
+    let refs = list_refs(&t.path).unwrap();
+    assert_eq!(refs.remotes.len(), 3);
+    let by_name = |n: &str| refs.remotes.iter().find(|b| b.name == n).unwrap();
+    assert_eq!(by_name("origin/main").remote.as_deref(), Some("origin"));
+    assert_eq!(by_name("origin/feat/x").remote.as_deref(), Some("origin"));
+    assert_eq!(by_name("upstream/main").remote.as_deref(), Some("upstream"));
 }
 
 #[test]
