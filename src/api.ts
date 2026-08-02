@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-
 export interface RepoInfo {
   git_dir: string;
   display_path: string;
@@ -79,10 +77,18 @@ export interface CommitDetails {
   files: FileDiff[];
 }
 
-export const api = {
-  openRepo: (path: string) => invoke<RepoInfo>("open_repo", { path }),
-  listRefs: () => invoke<RefsResult>("list_refs"),
-  getGraph: (branches: string[], limit: number) =>
-    invoke<GraphResult>("get_graph", { branches, limit }),
-  getCommitDetails: (id: string) => invoke<CommitDetails>("get_commit_details", { id }),
-};
+/// The repository access the UI needs from its host. The desktop build talks to
+/// Tauri over IPC and can open any repository; the web build talks to the HTTP
+/// server, which is started pointed at a single repository.
+export interface Backend {
+  /// Opens `path`. Ignored by hosts with a fixed repository.
+  openRepo(path: string): Promise<RepoInfo>;
+  listRefs(): Promise<RefsResult>;
+  getGraph(branches: string[], limit: number): Promise<GraphResult>;
+  getCommitDetails(id: string): Promise<CommitDetails>;
+  /// True when the host chooses the repository, so the UI hides its
+  /// open-repository controls and opens on startup without being asked.
+  readonly fixedRepo: boolean;
+  /// Directory picker; only present when `fixedRepo` is false.
+  pickRepo?(): Promise<string | null>;
+}

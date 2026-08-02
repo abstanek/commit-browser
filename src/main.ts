@@ -1,11 +1,5 @@
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import {
-  api,
-  type BranchInfo,
-  type CommitDetails,
-  type GraphResult,
-  type RefsResult,
-} from "./api";
+import { backend } from "@backend";
+import type { BranchInfo, CommitDetails, GraphResult, RefsResult } from "./api";
 import { graphWidthPx, renderGraph, ROW_H } from "./graph";
 
 const PAGE = 1000;
@@ -62,6 +56,7 @@ const el = {
   fileList: $("file-list"),
   diffView: $("diff-view"),
   emptyState: $("empty-state"),
+  emptyHint: $("empty-hint"),
 };
 
 function escapeHtml(s: string): string {
@@ -286,7 +281,7 @@ function renderCommitList(): void {
 async function refreshGraph(): Promise<void> {
   if (!state.repoPath) return;
   try {
-    state.graph = await api.getGraph([...state.enabled], state.limit);
+    state.graph = await backend.getGraph([...state.enabled], state.limit);
   } catch (e) {
     toast(`Failed to load graph: ${e}`);
     return;
@@ -332,7 +327,7 @@ async function selectCommit(id: string, scrollTo = false): Promise<void> {
       ?.scrollIntoView({ block: "nearest" });
   }
   try {
-    state.details = await api.getCommitDetails(id);
+    state.details = await backend.getCommitDetails(id);
     state.selectedFile = 0;
   } catch (e) {
     toast(`Failed to load commit: ${e}`);
@@ -453,22 +448,23 @@ function setDetailsVisible(visible: boolean): void {
 async function openRepo(path: string): Promise<void> {
   let info;
   try {
-    info = await api.openRepo(path);
+    info = await backend.openRepo(path);
   } catch (e) {
     toast(`Could not open repository: ${e}`);
+    if (backend.fixedRepo) el.emptyHint.textContent = `Server error: ${e}`;
     return;
   }
   state.repoPath = info.display_path;
   state.limit = PAGE;
   state.selectedId = null;
   state.details = null;
-  store.setLastRepo(path);
+  if (!backend.fixedRepo) store.setLastRepo(path);
   el.repoName.textContent = info.name;
   el.repoPath.textContent = info.display_path;
   el.emptyState.hidden = true;
 
   try {
-    state.refs = await api.listRefs();
+    state.refs = await backend.listRefs();
   } catch (e) {
     toast(`Could not list branches: ${e}`);
     return;
@@ -492,7 +488,7 @@ async function openRepo(path: string): Promise<void> {
 async function refreshAll(): Promise<void> {
   if (!state.repoPath) return;
   try {
-    state.refs = await api.listRefs();
+    state.refs = await backend.listRefs();
   } catch (e) {
     toast(`Refresh failed: ${e}`);
     return;
@@ -511,18 +507,23 @@ async function refreshAll(): Promise<void> {
 }
 
 async function chooseRepo(): Promise<void> {
-  const dir = await openDialog({
-    directory: true,
-    title: "Open git repository",
-  });
-  if (typeof dir === "string") await openRepo(dir);
+  const dir = await backend.pickRepo?.();
+  if (dir) await openRepo(dir);
 }
 
 // -------------------------------------------------------------------- wiring
 
 function wire(): void {
-  el.openRepo.addEventListener("click", () => void chooseRepo());
-  el.openRepoEmpty.addEventListener("click", () => void chooseRepo());
+  // The web build browses whichever repository the server was pointed at, so
+  // there is nothing to choose.
+  el.openRepo.hidden = backend.fixedRepo;
+  el.openRepoEmpty.hidden = backend.fixedRepo;
+  if (backend.fixedRepo) {
+    el.emptyHint.textContent = "Connecting to the commit-browser server…";
+  } else {
+    el.openRepo.addEventListener("click", () => void chooseRepo());
+    el.openRepoEmpty.addEventListener("click", () => void chooseRepo());
+  }
   el.refresh.addEventListener("click", () => void refreshAll());
   el.loadMore.addEventListener("click", () => {
     state.limit += PAGE;
@@ -678,8 +679,10 @@ async function init(): Promise<void> {
   el.details.style.height = `${store.detailsHeight()}px`;
   setDetailsVisible(store.detailsVisible());
   renderDetails();
-  const last = store.lastRepo();
-  if (last) await openRepo(last);
+  // The server picks the repository for the web build, which ignores the path;
+  // the desktop build reopens whatever was open last.
+  const last = backend.fixedRepo ? "" : store.lastRepo();
+  if (last !== null) await openRepo(last);
 }
 
 void init();
