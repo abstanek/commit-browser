@@ -104,6 +104,12 @@
   box-sizing: border-box;
 }
 
+/* The rules below set display on elements that also get toggled with the
+   hidden attribute, and an author rule beats the browser's [hidden] styling. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   height: 100%;
