@@ -236,6 +236,86 @@ fn details_root_commit() {
 }
 
 #[test]
+fn review_unmerged_branch() {
+    let (t, oids) = sample();
+    let [_a, b, _c, topic, _m, f] = oids[..] else { panic!() };
+    let r = review(&t.path, "refs/heads/main", "refs/heads/topic").unwrap();
+
+    assert_eq!(r.merge_base, Some(b.to_string()));
+    assert_eq!(r.head_id, topic.to_string());
+    assert_eq!(r.base_id, f.to_string());
+    // Only the commit made on topic; main is ahead by C, M and F, since the
+    // merge puts feature's commit on main too.
+    let summaries: Vec<_> = r.commits.iter().map(|c| c.id.clone()).collect();
+    assert_eq!(summaries, vec![topic.to_string()]);
+    assert_eq!(r.behind, 3);
+    assert!(!r.commits_truncated);
+
+    // Diffed from the merge base, so main's later edits to f.txt are absent.
+    let paths: Vec<_> = r.files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(paths, vec!["topic.txt"]);
+    assert_eq!(r.files[0].status, "added");
+}
+
+#[test]
+fn review_of_merged_branch_is_empty() {
+    let (t, oids) = sample();
+    let [_a, _b, c, ..] = oids[..] else { panic!() };
+    let r = review(&t.path, "refs/heads/main", "refs/heads/feature").unwrap();
+    // feature is contained in main: nothing to merge, but it is behind.
+    assert!(r.commits.is_empty());
+    assert!(r.files.is_empty());
+    assert_eq!(r.merge_base, Some(c.to_string()));
+    assert_eq!(r.behind, 3);
+}
+
+#[test]
+fn review_the_other_way_round() {
+    let (t, oids) = sample();
+    let [_a, b, c, _topic, m, f] = oids[..] else { panic!() };
+    let r = review(&t.path, "refs/heads/feature", "refs/heads/main").unwrap();
+    let got: Vec<_> = r.commits.iter().map(|c| c.id.clone()).collect();
+    assert_eq!(got, vec![f.to_string(), m.to_string(), b.to_string()]);
+    assert_eq!(r.merge_base, Some(c.to_string()));
+    assert_eq!(r.behind, 0);
+    assert_eq!(r.files.len(), 1);
+    assert_eq!(r.files[0].path, "f.txt");
+}
+
+#[test]
+fn review_against_itself_is_empty() {
+    let (t, _) = sample();
+    let r = review(&t.path, "refs/heads/main", "refs/heads/main").unwrap();
+    assert!(r.commits.is_empty());
+    assert!(r.files.is_empty());
+    assert_eq!(r.behind, 0);
+}
+
+#[test]
+fn review_unrelated_histories_shows_whole_branch() {
+    let (mut t, _) = sample();
+    let orphan = t.commit("orphan", &[], &[("only.txt", "x\n")]);
+    let r = review(&t.path, "refs/heads/main", "refs/heads/orphan").unwrap();
+
+    assert_eq!(r.merge_base, None);
+    assert_eq!(r.commits.len(), 1);
+    assert_eq!(r.commits[0].id, orphan.to_string());
+    // No merge base: the branch reads as wholly added.
+    assert_eq!(r.files.len(), 1);
+    assert_eq!(r.files[0].path, "only.txt");
+    assert_eq!(r.files[0].status, "added");
+}
+
+#[test]
+fn review_accepts_raw_commit_ids() {
+    let (t, oids) = sample();
+    let [_a, b, _c, topic, ..] = oids[..] else { panic!() };
+    let r = review(&t.path, &b.to_string(), &topic.to_string()).unwrap();
+    assert_eq!(r.commits.len(), 1);
+    assert_eq!(r.merge_base, Some(b.to_string()));
+}
+
+#[test]
 fn merge_commit_layout() {
     let (t, oids) = sample();
     let [a, b, c, _tt, m, _f] = oids[..] else { panic!() };
