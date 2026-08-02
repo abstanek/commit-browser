@@ -22,6 +22,10 @@
   <body>
     <div id="app">
       <header id="toolbar">
+        <div class="segmented" role="group" title="Browse the commit graph, or review a branch against its merge target">
+          <button id="mode-graph" class="btn">Graph</button>
+          <button id="mode-review" class="btn">Review</button>
+        </div>
         <button id="open-repo" class="btn">Open Repository…</button>
         <button id="refresh" class="btn" title="Re-read branches and commits from disk (F5)">
           ⟳ Refresh
@@ -38,6 +42,10 @@
       </header>
 
       <aside id="sidebar">
+        <div class="sidebar-controls" id="base-controls" hidden>
+          <label for="base-ref">Into</label>
+          <select id="base-ref" title="Branch this one would be merged into"></select>
+        </div>
         <div class="sidebar-controls">
           <label for="branch-sort">Sort</label>
           <select id="branch-sort">
@@ -94,6 +102,23 @@
           </div>
         </section>
       </main>
+
+      <section id="review" hidden>
+        <div id="review-head">
+          <div id="review-summary"></div>
+          <div class="spacer"></div>
+          <div id="review-nav">
+            <button id="commit-prev" class="btn" title="Previous commit">◀</button>
+            <select id="commit-select" title="Show the whole branch, or one commit"></select>
+            <button id="commit-next" class="btn" title="Next commit">▶</button>
+          </div>
+        </div>
+        <div id="review-message" hidden></div>
+        <div id="review-body">
+          <div id="review-tree"></div>
+          <div id="review-diff"></div>
+        </div>
+      </section>
 
       <div id="empty-state">
         <div>

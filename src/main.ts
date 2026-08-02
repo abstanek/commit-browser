@@ -2,14 +2,21 @@ import { backend } from "@backend";
 import type { BranchInfo, CommitDetails, GraphResult, RefsResult } from "./api";
 import { fileLabel, patchHtml, statsHtml, STATUS_LETTER } from "./diff";
 import { graphWidthPx, renderGraph, ROW_H } from "./graph";
+import * as review from "./review";
 import { $, escapeHtml, formatDate, toast } from "./util";
 
 const PAGE = 1000;
 
+type Mode = "graph" | "review";
+
 interface AppUiState {
   repoPath: string | null; // display path, used as persistence key
+  mode: Mode;
   refs: RefsResult | null;
-  enabled: Set<string>; // full ref names
+  enabled: Set<string>; // full ref names, graph mode
+  /// Review mode: the branch under review and the one it would merge into.
+  head: string | null;
+  base: string | null;
   graph: GraphResult | null;
   limit: number;
   selectedId: string | null;
@@ -21,8 +28,11 @@ interface AppUiState {
 
 const state: AppUiState = {
   repoPath: null,
+  mode: "graph",
   refs: null,
   enabled: new Set(),
+  head: null,
+  base: null,
   graph: null,
   limit: PAGE,
   selectedId: null,
@@ -32,6 +42,11 @@ const state: AppUiState = {
 };
 
 const el = {
+  main: $("main"),
+  modeGraph: $("mode-graph"),
+  modeReview: $("mode-review"),
+  baseControls: $("base-controls"),
+  baseRef: $<HTMLSelectElement>("base-ref"),
   openRepo: $("open-repo"),
   openRepoEmpty: $("open-repo-empty"),
   refresh: $("refresh"),
@@ -89,6 +104,15 @@ const store = {
   setCollapsedFor(repo: string, remotes: string[]) {
     localStorage.setItem(`collapsed:${repo}`, JSON.stringify(remotes));
   },
+  mode: (): Mode => (localStorage.getItem("mode") === "review" ? "review" : "graph"),
+  setMode: (m: Mode) => localStorage.setItem("mode", m),
+  reviewFor(repo: string): { base: string; head: string } | null {
+    const raw = localStorage.getItem(`review:${repo}`);
+    return raw ? (JSON.parse(raw) as { base: string; head: string }) : null;
+  },
+  setReviewFor(repo: string, base: string, head: string) {
+    localStorage.setItem(`review:${repo}`, JSON.stringify({ base, head }));
+  },
   collapsedSections(): Set<string> {
     const raw = localStorage.getItem("collapsedSections");
     return new Set(raw ? (JSON.parse(raw) as string[]) : []);
@@ -125,14 +149,24 @@ function sortBranches(branches: BranchInfo[]): BranchInfo[] {
   return copy;
 }
 
+/// Graph mode enables any number of branches; review mode picks exactly one,
+/// so the same rows switch between checkboxes and radio buttons.
 function refItemHtml(b: BranchInfo, label: string, isHead: boolean): string {
-  const checked = state.enabled.has(b.full_name);
+  const reviewing = state.mode === "review";
+  const checked = reviewing ? state.head === b.full_name : state.enabled.has(b.full_name);
+  const input = reviewing
+    ? `<input type="radio" name="head-ref" data-ref="${escapeHtml(b.full_name)}" ${
+        checked ? "checked" : ""
+      }/>`
+    : `<input type="checkbox" data-ref="${escapeHtml(b.full_name)}" ${
+        checked ? "checked" : ""
+      }/>`;
   return (
     `<label class="ref-item${isHead ? " head" : ""}" title="${escapeHtml(b.full_name)}">` +
-    `<input type="checkbox" data-ref="${escapeHtml(b.full_name)}" ${checked ? "checked" : ""}/>` +
+    input +
     `<span class="ref-name">${escapeHtml(label)}</span>` +
     (isHead ? `<span class="head-dot" title="Current branch">●</span>` : "") +
-    (checked
+    (checked && !reviewing
       ? `<button class="jump-btn" data-target="${b.target}" ` +
         `title="Jump to head of ${escapeHtml(b.name)}">⌖</button>`
       : "") +
@@ -206,6 +240,108 @@ function setAll(branches: BranchInfo[], on: boolean): void {
   persistEnabled();
   renderSidebar();
   void refreshGraph();
+}
+
+// --------------------------------------------------------------- review mode
+
+function allBranches(): BranchInfo[] {
+  return [...(state.refs?.locals ?? []), ...(state.refs?.remotes ?? [])];
+}
+
+const TRUNKS = ["main", "master", "trunk", "develop"];
+
+/// The branch a review would most likely target: the repo's trunk if it has
+/// one, otherwise the checked-out branch, preferring local refs and never the
+/// branch under review. Null when the repo has nothing else to offer.
+function defaultBase(head: string | null): string | null {
+  const rank = (b: BranchInfo): number => {
+    const leaf = b.remote ? b.name.slice(b.remote.length + 1) : b.name;
+    const remote = b.remote ? 20 : 0;
+    const trunk = TRUNKS.indexOf(leaf);
+    if (trunk !== -1) return trunk + remote;
+    if (!b.remote && b.name === state.refs?.head_branch) return 10;
+    return 50 + remote;
+  };
+  return (
+    allBranches()
+      .filter((b) => b.full_name !== head)
+      .sort((a, b) => rank(a) - rank(b))[0]?.full_name ?? null
+  );
+}
+
+function renderBaseSelect(): void {
+  const groups: [string, BranchInfo[]][] = [
+    ["Branches", state.refs?.locals ?? []],
+    ["Remotes", state.refs?.remotes ?? []],
+  ];
+  el.baseRef.innerHTML = groups
+    .filter(([, list]) => list.length > 0)
+    .map(
+      ([label, list]) =>
+        `<optgroup label="${label}">` +
+        list
+          .map(
+            (b) =>
+              // A branch cannot be merged into itself.
+              `<option value="${escapeHtml(b.full_name)}"${
+                b.full_name === state.head ? " disabled" : ""
+              }>${escapeHtml(b.name)}</option>`,
+          )
+          .join("") +
+        `</optgroup>`,
+    )
+    .join("");
+  if (state.base) el.baseRef.value = state.base;
+}
+
+/// Keep the review selection pointing at refs that still exist, filling in
+/// defaults for a repo opened for the first time.
+function syncReviewRefs(): void {
+  const existing = new Set(allBranches().map((b) => b.full_name));
+  const saved = state.repoPath ? store.reviewFor(state.repoPath) : null;
+  if (!state.head && saved && existing.has(saved.head)) state.head = saved.head;
+  if (!state.base && saved && existing.has(saved.base)) state.base = saved.base;
+  if (state.head && !existing.has(state.head)) state.head = null;
+  if (state.base && (!existing.has(state.base) || state.base === state.head)) {
+    state.base = null;
+  }
+
+  if (!state.head) {
+    const headBranch = state.refs?.locals.find((b) => b.name === state.refs?.head_branch);
+    state.head = headBranch?.full_name ?? state.refs?.locals[0]?.full_name ?? null;
+  }
+  if (!state.base) state.base = defaultBase(state.head);
+  renderBaseSelect();
+}
+
+function persistReview(): void {
+  if (state.repoPath && state.base && state.head) {
+    store.setReviewFor(state.repoPath, state.base, state.head);
+  }
+}
+
+async function loadReview(): Promise<void> {
+  if (!state.head) review.clear("Pick a branch to review.");
+  else if (!state.base) review.clear("There is no other branch to merge into.");
+  else await review.load(state.base, state.head);
+}
+
+function setMode(mode: Mode): void {
+  state.mode = mode;
+  store.setMode(mode);
+  const reviewing = mode === "review";
+  el.modeGraph.classList.toggle("active", !reviewing);
+  el.modeReview.classList.toggle("active", reviewing);
+  el.main.hidden = reviewing;
+  el.baseControls.hidden = !reviewing;
+  el.toggleDetails.hidden = reviewing;
+  review.setVisible(reviewing);
+  // "all"/"none" only make sense for the graph's checkboxes.
+  for (const a of document.querySelectorAll<HTMLElement>(".section-actions")) {
+    a.hidden = reviewing;
+  }
+  renderSidebar();
+  if (reviewing && state.repoPath) void loadReview();
 }
 
 // --------------------------------------------------------------- commit list
@@ -412,9 +548,13 @@ async function openRepo(path: string): Promise<void> {
   } else {
     state.enabled = new Set(state.refs.locals.map((b) => b.full_name));
   }
+  state.head = null;
+  state.base = null;
+  syncReviewRefs();
   renderSidebar();
   renderDetails();
   await refreshGraph();
+  if (state.mode === "review") await loadReview();
 }
 
 /// Re-read refs and commits from disk, keeping the current branch selection
@@ -432,7 +572,12 @@ async function refreshAll(): Promise<void> {
   );
   state.enabled = new Set([...state.enabled].filter((r) => existing.has(r)));
   persistEnabled();
+  syncReviewRefs();
   renderSidebar();
+  if (state.mode === "review") {
+    await loadReview();
+    return;
+  }
   await refreshGraph();
   // The selected commit's refs/details may have changed (e.g. new tag).
   if (state.selectedId && state.graph?.rows.some((r) => r.id === state.selectedId)) {
@@ -464,12 +609,30 @@ function wire(): void {
     void refreshGraph();
   });
 
-  // Branch checkboxes (delegated).
+  el.modeGraph.addEventListener("click", () => setMode("graph"));
+  el.modeReview.addEventListener("click", () => setMode("review"));
+  review.wire();
+
+  el.baseRef.addEventListener("change", () => {
+    state.base = el.baseRef.value;
+    persistReview();
+    void loadReview();
+  });
+
+  // Branch selection (delegated): checkboxes in graph mode, radios in review.
   for (const list of [el.localBranches, el.remoteBranches]) {
     list.addEventListener("change", (ev) => {
       const cb = ev.target as HTMLInputElement;
       const ref = cb.dataset.ref;
       if (!ref) return;
+      if (state.mode === "review") {
+        state.head = ref;
+        if (state.base === ref) state.base = defaultBase(ref);
+        renderBaseSelect();
+        persistReview();
+        void loadReview();
+        return;
+      }
       if (cb.checked) state.enabled.add(ref);
       else state.enabled.delete(ref);
       persistEnabled();
@@ -547,8 +710,15 @@ function wire(): void {
       return;
     }
     if (ev.key !== "ArrowUp" && ev.key !== "ArrowDown") return;
-    if ((ev.target as HTMLElement).tagName === "INPUT") return;
+    const tag = (ev.target as HTMLElement).tagName;
+    if (tag === "INPUT" || tag === "SELECT") return;
     const delta = ev.key === "ArrowDown" ? 1 : -1;
+
+    // Review mode has one list to walk: the changed files.
+    if (state.mode === "review") {
+      if (review.moveSelection(delta)) ev.preventDefault();
+      return;
+    }
 
     // When the details pane has focus, arrows move through the diff's files.
     if (state.focus === "files" && !el.details.hidden && state.details?.files.length) {
@@ -612,6 +782,7 @@ async function init(): Promise<void> {
   el.branchSort.value = store.branchSort();
   el.details.style.height = `${store.detailsHeight()}px`;
   setDetailsVisible(store.detailsVisible());
+  setMode(store.mode());
   renderDetails();
   // The server picks the repository for the web build, which ignores the path;
   // the desktop build reopens whatever was open last.

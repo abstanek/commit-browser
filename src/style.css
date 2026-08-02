@@ -665,6 +665,201 @@ body {
   color: var(--text-dim);
 }
 
+/* -------------------------------------------------------------- review view */
+
+.segmented {
+  display: flex;
+}
+
+.segmented .btn:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.segmented .btn:last-child {
+  border-radius: 0 5px 5px 0;
+  margin-left: -1px;
+}
+
+#review {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+#review-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+
+#review-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.review-refs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.review-refs .arrow {
+  color: var(--text-dim);
+}
+
+.review-stat {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.review-stat.dim {
+  color: var(--text-dim);
+}
+
+.review-stat.warn {
+  color: var(--stat-del);
+}
+
+#review-nav {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#review-nav .btn {
+  padding: 4px 8px;
+}
+
+#review-nav .btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#commit-select {
+  font: inherit;
+  font-size: 12px;
+  max-width: 420px;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 4px;
+}
+
+#review-message {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+#review-message .sha {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: var(--text-dim);
+}
+
+#review-message .msg {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#review-message .dim {
+  color: var(--text-dim);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+#review-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+#review-tree {
+  width: 300px;
+  flex: none;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+  padding: 4px 0;
+}
+
+.tree-dir,
+.tree-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  padding-right: 8px;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.tree-dir:hover,
+.tree-file:hover {
+  background: var(--hover);
+}
+
+.tree-dir {
+  font-weight: 600;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-file.selected {
+  background: var(--sel);
+  color: var(--sel-text);
+}
+
+.tree-file.selected .filestat,
+.tree-file.selected .status {
+  color: var(--sel-text) !important;
+}
+
+#review-diff {
+  flex: 1;
+  overflow: auto;
+  min-width: 0;
+}
+
+.diff-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.diff-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* -------------------------------------------------------------- empty state */
 
 #empty-state {

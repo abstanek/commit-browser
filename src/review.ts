@@ -1,0 +1,348 @@
+import { backend } from "@backend";
+import type { FileDiff, ReviewResult } from "./api";
+import { fileLabel, patchHtml, statsHtml, STATUS_LETTER } from "./diff";
+import { $, escapeHtml, formatDate, toast } from "./util";
+
+/// Pull-request style view: the whole of one branch measured against the
+/// branch it would merge into, with the option to step through the individual
+/// commits that make it up.
+
+const ALL = "all";
+
+interface ReviewState {
+  base: string | null;
+  head: string | null;
+  result: ReviewResult | null;
+  /// Commit id whose own diff is shown, or ALL for the whole branch.
+  showing: string;
+  files: FileDiff[];
+  selected: number;
+  collapsed: Set<string>;
+  /// Shown when there is nothing to diff.
+  empty: string;
+  /// Indices into files, in the order their rows appear in the tree, skipping
+  /// anything inside a collapsed directory. Arrow keys walk this.
+  visible: number[];
+}
+
+const rs: ReviewState = {
+  base: null,
+  head: null,
+  result: null,
+  showing: ALL,
+  files: [],
+  selected: 0,
+  collapsed: new Set(),
+  empty: "Pick a branch to review.",
+  visible: [],
+};
+
+const el = {
+  root: $("review"),
+  summary: $("review-summary"),
+  commitSelect: $<HTMLSelectElement>("commit-select"),
+  prev: $<HTMLButtonElement>("commit-prev"),
+  next: $<HTMLButtonElement>("commit-next"),
+  tree: $("review-tree"),
+  diff: $("review-diff"),
+  message: $("review-message"),
+};
+
+// ----------------------------------------------------------------- file tree
+
+interface DirNode {
+  name: string;
+  path: string;
+  dirs: Map<string, DirNode>;
+  files: { file: FileDiff; index: number }[];
+}
+
+function newDir(name: string, path: string): DirNode {
+  return { name, path, dirs: new Map(), files: [] };
+}
+
+function buildTree(files: FileDiff[]): DirNode {
+  const root = newDir("", "");
+  files.forEach((file, index) => {
+    const parts = file.path.split("/");
+    let node = root;
+    for (const part of parts.slice(0, -1)) {
+      const path = node.path ? `${node.path}/${part}` : part;
+      let child = node.dirs.get(part);
+      if (!child) node.dirs.set(part, (child = newDir(part, path)));
+      node = child;
+    }
+    node.files.push({ file, index });
+  });
+  collapseChains(root);
+  return root;
+}
+
+/// Fold a directory that holds nothing but one subdirectory into its child, so
+/// deep paths read as "src/backend/api" on a single row.
+function collapseChains(node: DirNode): void {
+  for (const [key, child] of node.dirs) {
+    collapseChains(child);
+    if (child.files.length === 0 && child.dirs.size === 1) {
+      const [only] = [...child.dirs.values()];
+      node.dirs.set(key, { ...only, name: `${child.name}/${only.name}` });
+    }
+  }
+}
+
+type TreeRow =
+  | { kind: "dir"; dir: DirNode; depth: number }
+  | { kind: "file"; file: FileDiff; index: number; depth: number };
+
+/// One traversal drives both the markup and the arrow-key order, so the two
+/// cannot drift apart.
+function flatten(node: DirNode, depth: number, out: TreeRow[]): void {
+  for (const dir of [...node.dirs.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    out.push({ kind: "dir", dir, depth });
+    if (!rs.collapsed.has(dir.path)) flatten(dir, depth + 1, out);
+  }
+  for (const { file, index } of node.files) {
+    out.push({ kind: "file", file, index, depth });
+  }
+}
+
+function baseName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+/// Rows carry the file name alone; the directory is already the row above it.
+/// A rename only spells out the old name when the name itself changed.
+function treeLabel(f: FileDiff): string {
+  const name = escapeHtml(baseName(f.path));
+  if (!f.old_path) return name;
+  const old = baseName(f.old_path);
+  return old === baseName(f.path) ? name : `${escapeHtml(old)} → ${name}`;
+}
+
+function rowHtml(row: TreeRow): string {
+  const pad = `style="padding-left:${6 + row.depth * 13}px"`;
+  if (row.kind === "dir") {
+    const isCollapsed = rs.collapsed.has(row.dir.path);
+    return (
+      `<div class="tree-dir" data-path="${escapeHtml(row.dir.path)}" ${pad}>` +
+      `<span class="disclosure">${isCollapsed ? "▸" : "▾"}</span>` +
+      `<span class="tree-name">${escapeHtml(row.dir.name)}</span></div>`
+    );
+  }
+  const f = row.file;
+  const sel = row.index === rs.selected ? " selected" : "";
+  return (
+    `<div class="tree-file${sel}" data-i="${row.index}" ${pad} ` +
+    `title="${escapeHtml(f.old_path ? `${f.old_path} → ${f.path}` : f.path)}">` +
+    `<span class="status ${f.status}">${STATUS_LETTER[f.status] ?? "?"}</span>` +
+    `<span class="file-name">${treeLabel(f)}</span>${statsHtml(f)}</div>`
+  );
+}
+
+// -------------------------------------------------------------------- render
+
+function renderSummary(): void {
+  const r = rs.result;
+  if (!r) {
+    el.summary.innerHTML = "";
+    return;
+  }
+  const adds = r.files.reduce((n, f) => n + f.additions, 0);
+  const dels = r.files.reduce((n, f) => n + f.deletions, 0);
+  const commits = `${r.commits.length}${r.commits_truncated ? "+" : ""} commit${
+    r.commits.length === 1 ? "" : "s"
+  }`;
+  el.summary.innerHTML =
+    `<span class="review-refs">` +
+    `<span class="chip local">${escapeHtml(shortRef(rs.head!))}</span>` +
+    `<span class="arrow">→</span>` +
+    `<span class="chip local">${escapeHtml(shortRef(rs.base!))}</span>` +
+    `</span>` +
+    `<span class="review-stat">${commits}</span>` +
+    `<span class="review-stat">${r.files.length} file${r.files.length === 1 ? "" : "s"}</span>` +
+    `<span class="review-stat"><span class="filestat add">+${adds}</span>` +
+    `<span class="filestat del">−${dels}</span></span>` +
+    (r.behind
+      ? `<span class="review-stat dim">${r.behind} behind</span>`
+      : "") +
+    (r.merge_base === null
+      ? `<span class="review-stat warn">unrelated histories</span>`
+      : "");
+}
+
+function renderCommitSelect(): void {
+  const r = rs.result;
+  if (!r) {
+    el.commitSelect.innerHTML = "";
+    return;
+  }
+  const opts = [
+    `<option value="${ALL}">All changes (${r.commits.length} commits)</option>`,
+    ...r.commits.map(
+      (c) =>
+        `<option value="${c.id}">${c.short_id}  ${escapeHtml(c.summary)}</option>`,
+    ),
+  ];
+  el.commitSelect.innerHTML = opts.join("");
+  el.commitSelect.value = rs.showing;
+  const i = el.commitSelect.selectedIndex;
+  el.prev.disabled = i <= 0;
+  el.next.disabled = i < 0 || i >= el.commitSelect.options.length - 1;
+}
+
+function renderTree(): void {
+  if (rs.files.length === 0) {
+    el.tree.innerHTML = "";
+    rs.visible = [];
+    return;
+  }
+  const rows: TreeRow[] = [];
+  flatten(buildTree(rs.files), 0, rows);
+  rs.visible = rows.flatMap((r) => (r.kind === "file" ? [r.index] : []));
+  // Collapsing a directory can hide the selected file; fall back to the top.
+  if (!rs.visible.includes(rs.selected)) rs.selected = rs.visible[0] ?? 0;
+  el.tree.innerHTML = rows.map(rowHtml).join("");
+}
+
+function renderDiff(): void {
+  const f = rs.files[rs.selected];
+  if (!f) {
+    el.diff.innerHTML = "";
+    return;
+  }
+  el.diff.innerHTML =
+    `<div class="diff-head"><span class="status ${f.status}">` +
+    `${STATUS_LETTER[f.status] ?? "?"}</span>` +
+    `<span class="diff-path">${fileLabel(f)}</span>${statsHtml(f)}</div>` +
+    patchHtml(f);
+}
+
+/// The commit message of whichever single commit is being shown.
+function renderMessage(): void {
+  const c = rs.result?.commits.find((x) => x.id === rs.showing);
+  el.message.hidden = !c;
+  if (!c) return;
+  el.message.innerHTML =
+    `<span class="sha">${c.short_id}</span>` +
+    `<span class="msg">${escapeHtml(c.summary)}</span>` +
+    `<span class="dim">${escapeHtml(c.author)}, ${formatDate(c.time)}</span>`;
+}
+
+function renderEmpty(): void {
+  if (rs.files.length > 0) return;
+  let why = rs.empty;
+  if (rs.result) {
+    why =
+      rs.result.commits.length === 0
+        ? "Nothing to merge: this branch is already contained in the target."
+        : "This commit changes no files.";
+  }
+  el.tree.innerHTML = `<div class="detail-empty">${escapeHtml(why)}</div>`;
+  el.diff.innerHTML = "";
+}
+
+function render(): void {
+  renderSummary();
+  renderCommitSelect();
+  renderMessage();
+  renderTree();
+  renderDiff();
+  renderEmpty();
+}
+
+// --------------------------------------------------------------------- state
+
+function shortRef(full: string): string {
+  return full.replace(/^refs\/(heads|remotes|tags)\//, "");
+}
+
+/// Show either the whole branch diff or one commit's own changes.
+async function showCommit(id: string): Promise<void> {
+  rs.showing = id;
+  rs.selected = 0;
+  if (id === ALL) {
+    rs.files = rs.result?.files ?? [];
+  } else {
+    try {
+      rs.files = (await backend.getCommitDetails(id)).files;
+    } catch (e) {
+      toast(`Failed to load commit: ${e}`);
+      rs.files = [];
+    }
+  }
+  render();
+}
+
+export async function load(base: string, head: string): Promise<void> {
+  rs.base = base;
+  rs.head = head;
+  try {
+    rs.result = await backend.getReview(base, head);
+  } catch (e) {
+    toast(`Failed to compare branches: ${e}`);
+    rs.result = null;
+    rs.files = [];
+    render();
+    return;
+  }
+  await showCommit(ALL);
+}
+
+export function clear(why: string): void {
+  rs.base = null;
+  rs.head = null;
+  rs.result = null;
+  rs.files = [];
+  rs.empty = why;
+  render();
+}
+
+export function setVisible(visible: boolean): void {
+  el.root.hidden = !visible;
+}
+
+/// Arrow-key navigation through the file tree; returns false if unhandled.
+export function moveSelection(delta: number): boolean {
+  if (rs.visible.length === 0) return false;
+  const at = rs.visible.indexOf(rs.selected);
+  const next = Math.min(Math.max(0, at + delta), rs.visible.length - 1);
+  select(rs.visible[next]);
+  return true;
+}
+
+function select(i: number): void {
+  rs.selected = i;
+  for (const node of el.tree.querySelectorAll<HTMLElement>(".tree-file")) {
+    node.classList.toggle("selected", node.dataset.i === String(i));
+  }
+  el.tree.querySelector(".tree-file.selected")?.scrollIntoView({ block: "nearest" });
+  renderDiff();
+}
+
+function step(delta: number): void {
+  const i = el.commitSelect.selectedIndex + delta;
+  if (i < 0 || i >= el.commitSelect.options.length) return;
+  void showCommit(el.commitSelect.options[i].value);
+}
+
+export function wire(): void {
+  el.commitSelect.addEventListener("change", () => void showCommit(el.commitSelect.value));
+  el.prev.addEventListener("click", () => step(-1));
+  el.next.addEventListener("click", () => step(1));
+
+  el.tree.addEventListener("click", (ev) => {
+    const target = ev.target as HTMLElement;
+    const file = target.closest<HTMLElement>(".tree-file");
+    if (file?.dataset.i) {
+      select(Number(file.dataset.i));
+      return;
+    }
+    const dir = target.closest<HTMLElement>(".tree-dir");
+    if (dir?.dataset.path !== undefined) {
+      const path = dir.dataset.path;
+      if (rs.collapsed.has(path)) rs.collapsed.delete(path);
+      else rs.collapsed.add(path);
+      renderTree();
+    }
+  });
+}
