@@ -1,7 +1,7 @@
 import { backend } from "@backend";
 import type { BranchInfo, CommitDetails, GraphResult, RefsResult } from "./api";
 import { fileLabel, patchHtml, statsHtml, STATUS_LETTER } from "./diff";
-import { graphWidthPx, renderGraph, ROW_H } from "./graph";
+import { graphWidthPx, renderGraph, rowHeight } from "./graph";
 import * as review from "./review";
 import { $, escapeHtml, formatDate, toast } from "./util";
 
@@ -376,7 +376,8 @@ function renderCommitList(): void {
     })
     .join("");
 
-  const svgH = g.rows.length * ROW_H + (g.has_more ? ROW_H / 2 : 0);
+  const rowH = rowHeight();
+  const svgH = g.rows.length * rowH + (g.has_more ? rowH / 2 : 0);
   el.graphSvg.setAttribute("width", String(graphW));
   el.graphSvg.setAttribute("height", String(svgH));
   el.graphSvg.innerHTML = renderGraph(g.rows, g.head_id);

@@ -45,7 +45,8 @@
   --lane-8: #5b6ee1;
   --lane-9: #b3763a;
   font-family: -apple-system, "Segoe UI", Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-  font-size: 13px;
+  /* Every other size is in rem, so this scales the whole UI. */
+  font-size: var(--ui-font-size, 13px);
   color: var(--text);
 }
 
@@ -150,7 +151,7 @@ body {
 }
 
 #repo-path {
-  font-size: 11px;
+  font-size: 0.85rem;
   color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
@@ -189,7 +190,7 @@ body {
 
 .linkbtn {
   font: inherit;
-  font-size: 11px;
+  font-size: 0.85rem;
   border: none;
   background: none;
   color: var(--accent);
@@ -212,14 +213,14 @@ body {
   align-items: center;
   gap: 8px;
   padding: 0 12px 10px;
-  font-size: 11px;
+  font-size: 0.85rem;
   color: var(--text-dim);
 }
 
 .sidebar-controls select {
   flex: 1;
   font: inherit;
-  font-size: 12px;
+  font-size: 0.92rem;
   color: var(--text);
   background: var(--btn-bg);
   border: 1px solid var(--border);
@@ -236,7 +237,7 @@ body {
   justify-content: space-between;
   align-items: baseline;
   padding: 2px 12px 4px;
-  font-size: 11px;
+  font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -259,7 +260,7 @@ body {
   flex: none;
   border: none;
   background: none;
-  font-size: 14px;
+  font-size: 1.08rem;
   line-height: 1;
   padding: 0 3px;
   border-radius: 3px;
@@ -297,7 +298,7 @@ body {
 
 .head-dot {
   color: var(--accent);
-  font-size: 9px;
+  font-size: 0.69rem;
 }
 
 .remote-header {
@@ -315,8 +316,8 @@ body {
 }
 
 .disclosure {
-  width: 11px;
-  font-size: 10px;
+  width: 0.85rem;
+  font-size: 0.77rem;
   color: var(--text-dim);
 }
 
@@ -327,7 +328,7 @@ body {
 }
 
 .remote-count {
-  font-size: 10.5px;
+  font-size: 0.81rem;
   font-weight: 400;
   color: var(--text-dim);
 }
@@ -379,12 +380,12 @@ body {
   z-index: 3;
   background: var(--bg-alt);
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 0.85rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-dim);
-  height: 24px;
+  height: 1.85rem;
 }
 
 #rows-wrap {
@@ -399,8 +400,9 @@ body {
   pointer-events: none;
 }
 
+/* Kept in step with rowHeight() in graph.ts, which positions the SVG nodes. */
 .row {
-  height: 26px;
+  height: 2rem;
   cursor: default;
   user-select: none;
 }
@@ -445,18 +447,18 @@ body {
 .cell.author,
 .cell.date {
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 0.92rem;
 }
 
 .cell.sha {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 11.5px;
+  font-size: 0.88rem;
   color: var(--text-dim);
 }
 
 .chip {
   flex: none;
-  font-size: 10.5px;
+  font-size: 0.81rem;
   font-weight: 600;
   line-height: 1;
   padding: 2.5px 6px;
@@ -540,7 +542,7 @@ body {
 
 .detail-row1 .sha {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 11.5px;
+  font-size: 0.88rem;
   color: var(--text-dim);
 }
 
@@ -549,7 +551,7 @@ body {
   gap: 16px;
   flex-wrap: wrap;
   margin-top: 4px;
-  font-size: 12px;
+  font-size: 0.92rem;
   color: var(--text-dim);
 }
 
@@ -607,15 +609,15 @@ body {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: 0.92rem;
 }
 
 .status {
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 1.15rem;
+  height: 1.15rem;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 0.77rem;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -630,7 +632,7 @@ body {
 .status.typechange { background: #57606a; }
 
 .filestat {
-  font-size: 11px;
+  font-size: 0.85rem;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -645,7 +647,7 @@ body {
 
 .diff {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 0.92rem;
   line-height: 1.5;
   min-width: fit-content;
 }
@@ -717,7 +719,7 @@ body {
 }
 
 .review-stat {
-  font-size: 12px;
+  font-size: 0.92rem;
   white-space: nowrap;
 }
 
@@ -747,7 +749,7 @@ body {
 
 #commit-select {
   font: inherit;
-  font-size: 12px;
+  font-size: 0.92rem;
   max-width: 420px;
   color: var(--text);
   background: var(--btn-bg);
@@ -763,7 +765,7 @@ body {
   gap: 10px;
   padding: 5px 12px;
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 0.92rem;
 }
 
 #review-message .sha {
@@ -851,7 +853,7 @@ body {
   padding: 6px 10px;
   background: var(--bg-alt);
   border-bottom: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 0.92rem;
 }
 
 .diff-path {
@@ -897,7 +899,7 @@ body {
   color: var(--toast-fg);
   padding: 9px 14px;
   border-radius: 6px;
-  font-size: 12.5px;
+  font-size: 0.96rem;
   max-width: 420px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
