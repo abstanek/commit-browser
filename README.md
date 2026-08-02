@@ -2,6 +2,14 @@
 
 A SourceTree-style commit graph browser for git repositories.
 
+Two views, switched from the toolbar:
+
+- **Graph** - the commit graph across any set of branches, with a details pane
+  showing the selected commit's diff
+- **Review** - one branch against the branch it would merge into, pull-request
+  style: the whole branch diff as a file tree, and a picker to step through the
+  branch's individual commits
+
 It comes in two variants that share the frontend (`src/`) and all repository
 reading (`gitcore/`):
 
