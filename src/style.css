@@ -639,10 +639,42 @@ body {
 .filestat.add { color: var(--stat-add); }
 .filestat.del { color: var(--stat-del); }
 
-#diff-view {
+/* The diff panes stack one section per file and scroll through them; blocks
+   are positioned against the pane, so it has to be the offset parent. */
+#diff-view,
+#review-diff {
   flex: 1;
   overflow: auto;
   min-width: 0;
+  position: relative;
+}
+
+/* Lets the last file scroll up to the top of the pane like any other. */
+.diff-block:last-child {
+  min-height: 100%;
+}
+
+.diff-block + .diff-block {
+  border-top: 1px solid var(--border);
+}
+
+.diff-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+
+.diff-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .diff {
@@ -835,31 +867,6 @@ body {
 .tree-file.selected .filestat,
 .tree-file.selected .status {
   color: var(--sel-text) !important;
-}
-
-#review-diff {
-  flex: 1;
-  overflow: auto;
-  min-width: 0;
-}
-
-.diff-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--bg-alt);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.92rem;
-}
-
-.diff-path {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* -------------------------------------------------------------- empty state */

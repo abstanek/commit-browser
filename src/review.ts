@@ -1,6 +1,7 @@
 import { backend } from "@backend";
 import type { FileDiff, ReviewResult } from "./api";
-import { fileLabel, patchHtml, statsHtml, STATUS_LETTER } from "./diff";
+import { statsHtml, STATUS_LETTER } from "./diff";
+import { createDiffPane } from "./diffpane";
 import { $, escapeHtml, formatDate, toast } from "./util";
 
 /// Pull-request style view: the whole of one branch measured against the
@@ -47,6 +48,12 @@ const el = {
   diff: $("review-diff"),
   message: $("review-message"),
 };
+
+const pane = createDiffPane(el.diff);
+pane.onSelect((index) => {
+  rs.selected = index;
+  markTree();
+});
 
 // ----------------------------------------------------------------- file tree
 
@@ -108,6 +115,26 @@ function flatten(node: DirNode, depth: number, out: TreeRow[]): void {
 
 function baseName(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
+}
+
+/// Orders paths the way flatten() draws them: within a directory, subdirectories
+/// come before files, each alphabetically. The diff pane stacks files in this
+/// order too, so scrolling through the patches walks the tree top to bottom.
+function comparePaths(a: string, b: string): number {
+  const x = a.split("/");
+  const y = b.split("/");
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] === y[i]) continue;
+    const aDir = i < x.length - 1;
+    const bDir = i < y.length - 1;
+    if (aDir !== bDir) return aDir ? -1 : 1;
+    return x[i].localeCompare(y[i]);
+  }
+  return x.length - y.length;
+}
+
+function inTreeOrder(files: FileDiff[]): FileDiff[] {
+  return [...files].sort((a, b) => comparePaths(a.path, b.path));
 }
 
 /// Rows carry the file name alone; the directory is already the row above it.
@@ -204,17 +231,12 @@ function renderTree(): void {
   el.tree.innerHTML = rows.map(rowHtml).join("");
 }
 
-function renderDiff(): void {
-  const f = rs.files[rs.selected];
-  if (!f) {
-    el.diff.innerHTML = "";
-    return;
-  }
-  el.diff.innerHTML =
-    `<div class="diff-head"><span class="status ${f.status}">` +
-    `${STATUS_LETTER[f.status] ?? "?"}</span>` +
-    `<span class="diff-path">${fileLabel(f)}</span>${statsHtml(f)}</div>` +
-    patchHtml(f);
+/// Why the diff pane has nothing to show.
+function emptyReason(): string {
+  if (!rs.result) return rs.empty;
+  return rs.result.commits.length === 0
+    ? "Nothing to merge: this branch is already contained in the target."
+    : "This commit changes no files.";
 }
 
 /// The commit message of whichever single commit is being shown.
@@ -228,26 +250,12 @@ function renderMessage(): void {
     `<span class="dim">${escapeHtml(c.author)}, ${formatDate(c.time)}</span>`;
 }
 
-function renderEmpty(): void {
-  if (rs.files.length > 0) return;
-  let why = rs.empty;
-  if (rs.result) {
-    why =
-      rs.result.commits.length === 0
-        ? "Nothing to merge: this branch is already contained in the target."
-        : "This commit changes no files.";
-  }
-  el.tree.innerHTML = `<div class="detail-empty">${escapeHtml(why)}</div>`;
-  el.diff.innerHTML = "";
-}
-
 function render(): void {
   renderSummary();
   renderCommitSelect();
   renderMessage();
   renderTree();
-  renderDiff();
-  renderEmpty();
+  pane.show(rs.files, emptyReason());
 }
 
 // --------------------------------------------------------------------- state
@@ -261,10 +269,10 @@ async function showCommit(id: string): Promise<void> {
   rs.showing = id;
   rs.selected = 0;
   if (id === ALL) {
-    rs.files = rs.result?.files ?? [];
+    rs.files = inTreeOrder(rs.result?.files ?? []);
   } else {
     try {
-      rs.files = (await backend.getCommitDetails(id)).files;
+      rs.files = inTreeOrder((await backend.getCommitDetails(id)).files);
     } catch (e) {
       toast(`Failed to load commit: ${e}`);
       rs.files = [];
@@ -310,13 +318,17 @@ export function moveSelection(delta: number): boolean {
   return true;
 }
 
-function select(i: number): void {
-  rs.selected = i;
+function markTree(): void {
   for (const node of el.tree.querySelectorAll<HTMLElement>(".tree-file")) {
-    node.classList.toggle("selected", node.dataset.i === String(i));
+    node.classList.toggle("selected", node.dataset.i === String(rs.selected));
   }
   el.tree.querySelector(".tree-file.selected")?.scrollIntoView({ block: "nearest" });
-  renderDiff();
+}
+
+function select(i: number): void {
+  rs.selected = i;
+  markTree();
+  pane.select(i, true);
 }
 
 function step(delta: number): void {

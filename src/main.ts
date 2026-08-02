@@ -1,6 +1,7 @@
 import { backend } from "@backend";
 import type { BranchInfo, CommitDetails, GraphResult, RefsResult } from "./api";
-import { fileLabel, patchHtml, statsHtml, STATUS_LETTER } from "./diff";
+import { fileLabel, statsHtml, STATUS_LETTER } from "./diff";
+import { createDiffPane } from "./diffpane";
 import { graphWidthPx, renderGraph, rowHeight } from "./graph";
 import * as review from "./review";
 import { $, escapeHtml, formatDate, toast } from "./util";
@@ -433,10 +434,7 @@ function setFocus(f: "commits" | "files"): void {
   el.details.classList.toggle("pane-focus", f === "files");
 }
 
-function selectFile(i: number): void {
-  const files = state.details?.files ?? [];
-  if (files.length === 0) return;
-  state.selectedFile = Math.min(Math.max(0, i), files.length - 1);
+function markFileList(): void {
   for (const c of el.fileList.children) {
     c.classList.toggle(
       "selected",
@@ -444,7 +442,14 @@ function selectFile(i: number): void {
     );
   }
   el.fileList.children[state.selectedFile]?.scrollIntoView({ block: "nearest" });
-  renderDiff();
+}
+
+function selectFile(i: number): void {
+  const files = state.details?.files ?? [];
+  if (files.length === 0) return;
+  state.selectedFile = Math.min(Math.max(0, i), files.length - 1);
+  markFileList();
+  detailPane.select(state.selectedFile, true);
 }
 
 async function selectCommit(id: string, scrollTo = false): Promise<void> {
@@ -486,12 +491,18 @@ async function jumpToCommit(id: string): Promise<void> {
 
 // -------------------------------------------------------------- details pane
 
+const detailPane = createDiffPane(el.diffView);
+detailPane.onSelect((index) => {
+  state.selectedFile = index;
+  markFileList();
+});
+
 function renderDetails(): void {
   const d = state.details;
   if (!d) {
     el.detailMeta.innerHTML = `<div class="detail-empty">Select a commit to see its details.</div>`;
     el.fileList.innerHTML = "";
-    el.diffView.innerHTML = "";
+    detailPane.show([], "");
     return;
   }
   const chips = d.refs
@@ -519,15 +530,7 @@ function renderDetails(): void {
       );
     })
     .join("");
-  if (d.files.length === 0) {
-    el.fileList.innerHTML = `<div class="detail-empty">No changes vs first parent.</div>`;
-  }
-  renderDiff();
-}
-
-function renderDiff(): void {
-  const f = state.details?.files[state.selectedFile];
-  el.diffView.innerHTML = f ? patchHtml(f) : "";
+  detailPane.show(d.files, "No changes vs first parent.");
 }
 
 function setDetailsVisible(visible: boolean): void {
