@@ -77,6 +77,24 @@ export interface CommitDetails {
   files: FileDiff[];
 }
 
+export interface ReviewCommit {
+  id: string;
+  short_id: string;
+  summary: string;
+  author: string;
+  time: number;
+}
+
+export interface ReviewResult {
+  base_id: string;
+  head_id: string;
+  merge_base: string | null;
+  commits: ReviewCommit[];
+  commits_truncated: boolean;
+  behind: number;
+  files: FileDiff[];
+}
+
 /// The repository access the UI needs from its host. The desktop build talks to
 /// Tauri over IPC and can open any repository; the web build talks to the HTTP
 /// server, which is started pointed at a single repository.
@@ -86,6 +104,8 @@ export interface Backend {
   listRefs(): Promise<RefsResult>;
   getGraph(branches: string[], limit: number): Promise<GraphResult>;
   getCommitDetails(id: string): Promise<CommitDetails>;
+  /// Diff `head` against the commit it would merge into, pull-request style.
+  getReview(base: string, head: string): Promise<ReviewResult>;
   /// True when the host chooses the repository, so the UI hides its
   /// open-repository controls and opens on startup without being asked.
   readonly fixedRepo: boolean;

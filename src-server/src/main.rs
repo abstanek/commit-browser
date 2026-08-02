@@ -102,6 +102,20 @@ async fn graph(
     blocking(move || gitcore::graph(&dir, &branches, limit)).await
 }
 
+#[derive(serde::Deserialize)]
+struct ReviewParams {
+    base: String,
+    head: String,
+}
+
+async fn review(
+    State(s): State<Arc<AppState>>,
+    Query(p): Query<ReviewParams>,
+) -> Result<Json<gitcore::ReviewResult>, ApiError> {
+    let dir = s.git_dir.clone();
+    blocking(move || gitcore::review(&dir, &p.base, &p.head)).await
+}
+
 async fn commit(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -140,6 +154,7 @@ async fn main() -> ExitCode {
         .route("/api/repo", get(repo))
         .route("/api/refs", get(refs))
         .route("/api/graph", get(graph))
+        .route("/api/review", get(review))
         .route("/api/commits/{id}", get(commit))
         .fallback_service(files)
         .with_state(Arc::new(AppState { git_dir: info.git_dir }));

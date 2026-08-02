@@ -44,6 +44,15 @@ fn get_commit_details(id: String, state: State<AppState>) -> Result<gitcore::Com
     gitcore::commit_details(&current_repo(&state)?, &id)
 }
 
+#[tauri::command]
+fn get_review(
+    base: String,
+    head: String,
+    state: State<AppState>,
+) -> Result<gitcore::ReviewResult, String> {
+    gitcore::review(&current_repo(&state)?, &base, &head)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -52,7 +61,8 @@ pub fn run() {
             open_repo,
             list_refs,
             get_graph,
-            get_commit_details
+            get_commit_details,
+            get_review
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

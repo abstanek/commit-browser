@@ -6,6 +6,7 @@ import type {
   GraphResult,
   RefsResult,
   RepoInfo,
+  ReviewResult,
 } from "./api";
 
 export const backend: Backend = {
@@ -13,6 +14,7 @@ export const backend: Backend = {
   listRefs: () => invoke<RefsResult>("list_refs"),
   getGraph: (branches, limit) => invoke<GraphResult>("get_graph", { branches, limit }),
   getCommitDetails: (id) => invoke<CommitDetails>("get_commit_details", { id }),
+  getReview: (base, head) => invoke<ReviewResult>("get_review", { base, head }),
   fixedRepo: false,
   async pickRepo() {
     const dir = await openDialog({ directory: true, title: "Open git repository" });

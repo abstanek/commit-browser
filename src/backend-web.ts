@@ -4,6 +4,7 @@ import type {
   GraphResult,
   RefsResult,
   RepoInfo,
+  ReviewResult,
 } from "./api";
 
 /// Requests go to the origin serving the page, so the app works unchanged
@@ -32,5 +33,7 @@ export const backend: Backend = {
     return get<GraphResult>(`graph?${q}`);
   },
   getCommitDetails: (id) => get<CommitDetails>(`commits/${encodeURIComponent(id)}`),
+  getReview: (base, head) =>
+    get<ReviewResult>(`review?${new URLSearchParams({ base, head })}`),
   fixedRepo: true,
 };
