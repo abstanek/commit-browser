@@ -1,6 +1,8 @@
 import { backend } from "@backend";
 import type { BranchInfo, CommitDetails, GraphResult, RefsResult } from "./api";
+import { fileLabel, patchHtml, statsHtml, STATUS_LETTER } from "./diff";
 import { graphWidthPx, renderGraph, ROW_H } from "./graph";
+import { $, escapeHtml, formatDate, toast } from "./util";
 
 const PAGE = 1000;
 
@@ -29,9 +31,6 @@ const state: AppUiState = {
   focus: "commits",
 };
 
-const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
-  document.getElementById(id) as T;
-
 const el = {
   openRepo: $("open-repo"),
   openRepoEmpty: $("open-repo-empty"),
@@ -58,34 +57,6 @@ const el = {
   emptyState: $("empty-state"),
   emptyHint: $("empty-hint"),
 };
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-const dateFmt = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function formatDate(seconds: number): string {
-  return dateFmt.format(new Date(seconds * 1000));
-}
-
-function toast(msg: string): void {
-  const t = document.createElement("div");
-  t.className = "toast";
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 4000);
-}
 
 // ---------------------------------------------------------------- persistence
 
@@ -354,14 +325,6 @@ async function jumpToCommit(id: string): Promise<void> {
 
 // -------------------------------------------------------------- details pane
 
-const STATUS_LETTER: Record<string, string> = {
-  added: "A",
-  modified: "M",
-  deleted: "D",
-  renamed: "R",
-  typechange: "T",
-};
-
 function renderDetails(): void {
   const d = state.details;
   if (!d) {
@@ -388,16 +351,10 @@ function renderDetails(): void {
   el.fileList.innerHTML = d.files
     .map((f, i) => {
       const sel = i === state.selectedFile ? " selected" : "";
-      const stats = f.binary
-        ? `<span class="filestat">bin</span>`
-        : `<span class="filestat add">+${f.additions}</span><span class="filestat del">−${f.deletions}</span>`;
-      const name = f.old_path
-        ? `${escapeHtml(f.old_path)} → ${escapeHtml(f.path)}`
-        : escapeHtml(f.path);
       return (
         `<div class="file-item${sel}" data-i="${i}" title="${escapeHtml(f.path)}">` +
         `<span class="status ${f.status}">${STATUS_LETTER[f.status] ?? "?"}</span>` +
-        `<span class="file-name">${name}</span>${stats}</div>`
+        `<span class="file-name">${fileLabel(f)}</span>${statsHtml(f)}</div>`
       );
     })
     .join("");
@@ -409,30 +366,7 @@ function renderDetails(): void {
 
 function renderDiff(): void {
   const f = state.details?.files[state.selectedFile];
-  if (!f) {
-    el.diffView.innerHTML = "";
-    return;
-  }
-  if (f.binary) {
-    el.diffView.innerHTML = `<div class="detail-empty">Binary file.</div>`;
-    return;
-  }
-  const out: string[] = [];
-  for (const line of f.patch.split("\n")) {
-    let cls = "ctx";
-    if (line.startsWith("@@")) cls = "hunk";
-    else if (line.startsWith("+++") || line.startsWith("---")) cls = "meta";
-    else if (line.startsWith("diff --git") || line.startsWith("index ")) cls = "meta";
-    else if (line.startsWith("new file") || line.startsWith("deleted file")) cls = "meta";
-    else if (line.startsWith("similarity") || line.startsWith("rename")) cls = "meta";
-    else if (line.startsWith("+")) cls = "add";
-    else if (line.startsWith("-")) cls = "del";
-    out.push(`<div class="dl ${cls}">${escapeHtml(line) || " "}</div>`);
-  }
-  if (f.truncated) {
-    out.push(`<div class="dl meta">… patch truncated (too large) …</div>`);
-  }
-  el.diffView.innerHTML = `<pre class="diff">${out.join("")}</pre>`;
+  el.diffView.innerHTML = f ? patchHtml(f) : "";
 }
 
 function setDetailsVisible(visible: boolean): void {
