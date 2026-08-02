@@ -18,6 +18,7 @@ fn err(e: git2::Error) -> String {
 }
 
 const MAX_PATCH_BYTES: usize = 1_000_000;
+const MAX_REVIEW_COMMITS: usize = 2000;
 
 #[derive(Serialize, Debug)]
 pub struct RepoInfo {
@@ -103,6 +104,30 @@ pub struct CommitDetails {
     pub commit_time: i64,
     pub parents: Vec<String>,
     pub refs: Vec<RefLabel>,
+    pub files: Vec<FileDiff>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct ReviewCommit {
+    pub id: String,
+    pub short_id: String,
+    pub summary: String,
+    pub author: String,
+    pub time: i64,
+}
+
+#[derive(Serialize, Debug)]
+pub struct ReviewResult {
+    pub base_id: String,
+    pub head_id: String,
+    /// Where the branches diverged, or None if their histories are unrelated.
+    pub merge_base: Option<String>,
+    /// Commits on head but not base, newest first.
+    pub commits: Vec<ReviewCommit>,
+    pub commits_truncated: bool,
+    /// Commits on base but not head: how far the branch has fallen behind.
+    pub behind: usize,
+    /// Combined diff from the merge base to head.
     pub files: Vec<FileDiff>,
 }
 
@@ -277,10 +302,39 @@ pub fn commit_details(repo_path: &str, id: &str) -> Result<CommitDetails> {
         Ok(p) => Some(p.tree().map_err(err)?),
         Err(_) => None,
     };
+    let files = diff_files(&repo, old_tree.as_ref(), Some(&new_tree))?;
+
+    let author = commit.author();
+    let committer = commit.committer();
+    let labels = ref_labels(&repo);
+    Ok(CommitDetails {
+        id: commit.id().to_string(),
+        short_id: commit.id().to_string()[..7].to_string(),
+        summary: commit.summary().unwrap_or("").to_string(),
+        message: commit.message().unwrap_or("").to_string(),
+        author_name: author.name().unwrap_or("").to_string(),
+        author_email: author.email().unwrap_or("").to_string(),
+        author_time: author.when().seconds(),
+        committer_name: committer.name().unwrap_or("").to_string(),
+        committer_email: committer.email().unwrap_or("").to_string(),
+        commit_time: commit.time().seconds(),
+        parents: commit.parent_ids().map(|p| p.to_string()).collect(),
+        refs: labels.get(&commit.id()).cloned().unwrap_or_default(),
+        files,
+    })
+}
+
+/// Per-file patches between two trees. A missing tree means the empty tree, so
+/// passing None as `old` yields an all-added diff.
+fn diff_files(
+    repo: &Repository,
+    old_tree: Option<&git2::Tree>,
+    new_tree: Option<&git2::Tree>,
+) -> Result<Vec<FileDiff>> {
     let mut opts = DiffOptions::new();
     opts.context_lines(3);
     let mut diff: Diff = repo
-        .diff_tree_to_tree(old_tree.as_ref(), Some(&new_tree), Some(&mut opts))
+        .diff_tree_to_tree(old_tree, new_tree, Some(&mut opts))
         .map_err(err)?;
     let mut find_opts = git2::DiffFindOptions::new();
     find_opts.renames(true);
@@ -353,23 +407,68 @@ pub fn commit_details(repo_path: &str, id: &str) -> Result<CommitDetails> {
             truncated,
         });
     }
+    Ok(files)
+}
 
-    let author = commit.author();
-    let committer = commit.committer();
-    let labels = ref_labels(&repo);
-    Ok(CommitDetails {
-        id: commit.id().to_string(),
-        short_id: commit.id().to_string()[..7].to_string(),
-        summary: commit.summary().unwrap_or("").to_string(),
-        message: commit.message().unwrap_or("").to_string(),
-        author_name: author.name().unwrap_or("").to_string(),
-        author_email: author.email().unwrap_or("").to_string(),
-        author_time: author.when().seconds(),
-        committer_name: committer.name().unwrap_or("").to_string(),
-        committer_email: committer.email().unwrap_or("").to_string(),
-        commit_time: commit.time().seconds(),
-        parents: commit.parent_ids().map(|p| p.to_string()).collect(),
-        refs: labels.get(&commit.id()).cloned().unwrap_or_default(),
+fn resolve_commit<'r>(repo: &'r Repository, name: &str) -> Result<git2::Commit<'r>> {
+    repo.revparse_single(name)
+        .map_err(err)?
+        .peel_to_commit()
+        .map_err(err)
+}
+
+/// Compare a branch with the one it would merge into, the way a pull request
+/// does: the file list is the diff from the merge base to `head`, so commits
+/// added to `base` since the branch diverged don't show up as reversed edits.
+pub fn review(repo_path: &str, base: &str, head: &str) -> Result<ReviewResult> {
+    let repo = Repository::open(repo_path).map_err(err)?;
+    let base_commit = resolve_commit(&repo, base)?;
+    let head_commit = resolve_commit(&repo, head)?;
+    let merge_base = repo.merge_base(base_commit.id(), head_commit.id()).ok();
+
+    let mut walk = repo.revwalk().map_err(err)?;
+    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME).map_err(err)?;
+    walk.push(head_commit.id()).map_err(err)?;
+    let _ = walk.hide(base_commit.id());
+    let mut commits = Vec::new();
+    let mut commits_truncated = false;
+    for oid in walk {
+        let oid = oid.map_err(err)?;
+        if commits.len() == MAX_REVIEW_COMMITS {
+            commits_truncated = true;
+            break;
+        }
+        let c = repo.find_commit(oid).map_err(err)?;
+        commits.push(ReviewCommit {
+            id: oid.to_string(),
+            short_id: oid.to_string()[..7].to_string(),
+            summary: c.summary().unwrap_or("").to_string(),
+            author: c.author().name().unwrap_or("").to_string(),
+            time: c.time().seconds(),
+        });
+    }
+
+    let mut behind_walk = repo.revwalk().map_err(err)?;
+    behind_walk.push(base_commit.id()).map_err(err)?;
+    let _ = behind_walk.hide(head_commit.id());
+    let behind = behind_walk.count();
+
+    // Unrelated histories have no merge base; diff against the empty tree so
+    // the branch still shows as wholly added rather than erroring.
+    let old_tree = match merge_base {
+        Some(oid) => Some(repo.find_commit(oid).map_err(err)?.tree().map_err(err)?),
+        None => None,
+    };
+    let new_tree = head_commit.tree().map_err(err)?;
+    let files = diff_files(&repo, old_tree.as_ref(), Some(&new_tree))?;
+
+    Ok(ReviewResult {
+        base_id: base_commit.id().to_string(),
+        head_id: head_commit.id().to_string(),
+        merge_base: merge_base.map(|o| o.to_string()),
+        commits,
+        commits_truncated,
+        behind,
         files,
     })
 }
