@@ -124,7 +124,7 @@ body {
   grid-template:
     "toolbar toolbar" auto
     "sidebar main" 1fr
-    / 230px 1fr;
+    / 17.7rem 1fr;
 }
 
 /* ------------------------------------------------------------------ toolbar */
@@ -369,7 +369,7 @@ body {
 #list-header,
 .row {
   display: grid;
-  grid-template-columns: var(--graph-w) minmax(300px, 1fr) 170px 160px 80px;
+  grid-template-columns: var(--graph-w) minmax(23rem, 1fr) 13rem 12.3rem 6.2rem;
   align-items: center;
   min-width: fit-content;
 }
@@ -575,7 +575,7 @@ body {
 }
 
 #file-list {
-  width: 290px;
+  width: 22.3rem;
   flex: none;
   overflow-y: auto;
   border-right: 1px solid var(--border);
@@ -750,7 +750,7 @@ body {
 #commit-select {
   font: inherit;
   font-size: 0.92rem;
-  max-width: 420px;
+  max-width: 32rem;
   color: var(--text);
   background: var(--btn-bg);
   border: 1px solid var(--border);
@@ -793,7 +793,7 @@ body {
 }
 
 #review-tree {
-  width: 300px;
+  width: 23rem;
   flex: none;
   overflow: auto;
   border-right: 1px solid var(--border);

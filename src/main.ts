@@ -54,6 +54,8 @@ const el = {
   repoPath: $("repo-path"),
   toggleDetails: $("toggle-details"),
   themeToggle: $("theme-toggle"),
+  fontSmaller: $<HTMLButtonElement>("font-smaller"),
+  fontBigger: $<HTMLButtonElement>("font-bigger"),
   branchSort: $<HTMLSelectElement>("branch-sort"),
   localBranches: $("local-branches"),
   remoteBranches: $("remote-branches"),
@@ -104,6 +106,8 @@ const store = {
   setCollapsedFor(repo: string, remotes: string[]) {
     localStorage.setItem(`collapsed:${repo}`, JSON.stringify(remotes));
   },
+  fontSize: (): number => Number(localStorage.getItem("fontSize")) || FONT_DEFAULT,
+  setFontSize: (px: number) => localStorage.setItem("fontSize", String(px)),
   mode: (): Mode => (localStorage.getItem("mode") === "review" ? "review" : "graph"),
   setMode: (m: Mode) => localStorage.setItem("mode", m),
   reviewFor(repo: string): { base: string; head: string } | null {
@@ -125,7 +129,27 @@ const store = {
 type BranchSort = "recent" | "name";
 type ThemePref = "system" | "light" | "dark";
 
-// --------------------------------------------------------------------- theme
+// ------------------------------------------------------------- theme and size
+
+/// The root font size everything else is sized against; index.html applies the
+/// stored value before first paint so the UI does not reflow on load.
+const FONT_DEFAULT = 13;
+const FONT_MIN = 9;
+const FONT_MAX = 24;
+
+function applyFontSize(px: number): void {
+  document.documentElement.style.setProperty("--ui-font-size", `${px}px`);
+  el.fontSmaller.disabled = px <= FONT_MIN;
+  el.fontBigger.disabled = px >= FONT_MAX;
+}
+
+function stepFontSize(delta: number): void {
+  const px = Math.min(FONT_MAX, Math.max(FONT_MIN, store.fontSize() + delta));
+  store.setFontSize(px);
+  applyFontSize(px);
+  // Rows just changed height, and the graph SVG is drawn in pixels.
+  if (state.graph) renderCommitList();
+}
 
 const darkMedia = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -675,6 +699,9 @@ function wire(): void {
     renderSidebar();
   });
 
+  el.fontSmaller.addEventListener("click", () => stepFontSize(-1));
+  el.fontBigger.addEventListener("click", () => stepFontSize(1));
+
   el.themeToggle.addEventListener("click", () => {
     const order: ThemePref[] = ["system", "light", "dark"];
     const next = order[(order.indexOf(store.theme()) + 1) % order.length];
@@ -778,6 +805,7 @@ function wire(): void {
 async function init(): Promise<void> {
   wire();
   applyTheme();
+  applyFontSize(store.fontSize());
   applySectionCollapse();
   setFocus("commits");
   el.branchSort.value = store.branchSort();
