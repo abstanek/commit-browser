@@ -203,9 +203,11 @@ function renderCommitSelect(): void {
     el.commitSelect.innerHTML = "";
     return;
   }
+  // Oldest first, unlike the graph: a branch is reviewed in the order it was
+  // written, so stepping forward moves to the newer commit.
   const opts = [
     `<option value="${ALL}">All changes (${r.commits.length} commits)</option>`,
-    ...r.commits.map(
+    ...[...r.commits].reverse().map(
       (c) =>
         `<option value="${c.id}">${c.short_id}  ${escapeHtml(c.summary)}</option>`,
     ),
