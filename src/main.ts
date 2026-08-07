@@ -2,13 +2,14 @@ import { backend } from "@backend";
 import type { BranchInfo, CommitDetails, GraphResult, RefsResult } from "./api";
 import { fileLabel, statsHtml, STATUS_LETTER } from "./diff";
 import { createDiffPane } from "./diffpane";
+import * as files from "./files";
 import { graphWidthPx, renderGraph, rowHeight } from "./graph";
 import * as review from "./review";
-import { $, escapeHtml, formatDate, toast } from "./util";
+import { $, escapeHtml, formatDate, shortRef, toast } from "./util";
 
 const PAGE = 1000;
 
-type Mode = "graph" | "review";
+type Mode = "graph" | "review" | "files";
 
 interface AppUiState {
   repoPath: string | null; // display path, used as persistence key
@@ -18,6 +19,8 @@ interface AppUiState {
   /// Review mode: the branch under review and the one it would merge into.
   head: string | null;
   base: string | null;
+  /// Files mode: the ref being browsed.
+  rev: string | null;
   graph: GraphResult | null;
   limit: number;
   selectedId: string | null;
@@ -34,6 +37,7 @@ const state: AppUiState = {
   enabled: new Set(),
   head: null,
   base: null,
+  rev: null,
   graph: null,
   limit: PAGE,
   selectedId: null,
@@ -46,6 +50,7 @@ const el = {
   main: $("main"),
   modeGraph: $("mode-graph"),
   modeReview: $("mode-review"),
+  modeFiles: $("mode-files"),
   baseControls: $("base-controls"),
   baseRef: $<HTMLSelectElement>("base-ref"),
   openRepo: $("open-repo"),
@@ -109,8 +114,13 @@ const store = {
   },
   fontSize: (): number => Number(localStorage.getItem("fontSize")) || FONT_DEFAULT,
   setFontSize: (px: number) => localStorage.setItem("fontSize", String(px)),
-  mode: (): Mode => (localStorage.getItem("mode") === "review" ? "review" : "graph"),
+  mode: (): Mode => {
+    const m = localStorage.getItem("mode");
+    return m === "review" || m === "files" ? m : "graph";
+  },
   setMode: (m: Mode) => localStorage.setItem("mode", m),
+  revFor: (repo: string): string | null => localStorage.getItem(`rev:${repo}`),
+  setRevFor: (repo: string, rev: string) => localStorage.setItem(`rev:${repo}`, rev),
   reviewFor(repo: string): { base: string; head: string } | null {
     const raw = localStorage.getItem(`review:${repo}`);
     return raw ? (JSON.parse(raw) as { base: string; head: string }) : null;
@@ -174,16 +184,18 @@ function sortBranches(branches: BranchInfo[]): BranchInfo[] {
   return copy;
 }
 
-/// Graph mode enables any number of branches; review mode picks exactly one,
+/// Graph mode enables any number of branches; the other two pick exactly one,
 /// so the same rows switch between checkboxes and radio buttons.
 function refItemHtml(b: BranchInfo, label: string, isHead: boolean): string {
-  const reviewing = state.mode === "review";
-  const checked = reviewing ? state.head === b.full_name : state.enabled.has(b.full_name);
-  const input = reviewing
-    ? `<input type="radio" name="head-ref" data-ref="${escapeHtml(b.full_name)}" ${
+  const graphing = state.mode === "graph";
+  const checked = graphing
+    ? state.enabled.has(b.full_name)
+    : (state.mode === "review" ? state.head : state.rev) === b.full_name;
+  const input = graphing
+    ? `<input type="checkbox" data-ref="${escapeHtml(b.full_name)}" ${
         checked ? "checked" : ""
       }/>`
-    : `<input type="checkbox" data-ref="${escapeHtml(b.full_name)}" ${
+    : `<input type="radio" name="ref-pick" data-ref="${escapeHtml(b.full_name)}" ${
         checked ? "checked" : ""
       }/>`;
   return (
@@ -191,7 +203,7 @@ function refItemHtml(b: BranchInfo, label: string, isHead: boolean): string {
     input +
     `<span class="ref-name">${escapeHtml(label)}</span>` +
     (isHead ? `<span class="head-dot" title="Current branch">●</span>` : "") +
-    (checked && !reviewing
+    (checked && graphing
       ? `<button class="jump-btn" data-target="${b.target}" ` +
         `title="Jump to head of ${escapeHtml(b.name)}">⌖</button>`
       : "") +
@@ -319,22 +331,27 @@ function renderBaseSelect(): void {
   if (state.base) el.baseRef.value = state.base;
 }
 
-/// Keep the review selection pointing at refs that still exist, filling in
+/// Keep the single-ref selections pointing at refs that still exist, filling in
 /// defaults for a repo opened for the first time.
-function syncReviewRefs(): void {
+function syncRefSelections(): void {
   const existing = new Set(allBranches().map((b) => b.full_name));
   const saved = state.repoPath ? store.reviewFor(state.repoPath) : null;
+  const savedRev = state.repoPath ? store.revFor(state.repoPath) : null;
   if (!state.head && saved && existing.has(saved.head)) state.head = saved.head;
   if (!state.base && saved && existing.has(saved.base)) state.base = saved.base;
+  if (!state.rev && savedRev && existing.has(savedRev)) state.rev = savedRev;
   if (state.head && !existing.has(state.head)) state.head = null;
+  if (state.rev && !existing.has(state.rev)) state.rev = null;
   if (state.base && (!existing.has(state.base) || state.base === state.head)) {
     state.base = null;
   }
 
-  if (!state.head) {
-    const headBranch = state.refs?.locals.find((b) => b.name === state.refs?.head_branch);
-    state.head = headBranch?.full_name ?? state.refs?.locals[0]?.full_name ?? null;
-  }
+  const checkedOut =
+    state.refs?.locals.find((b) => b.name === state.refs?.head_branch)?.full_name ??
+    state.refs?.locals[0]?.full_name ??
+    null;
+  if (!state.head) state.head = checkedOut;
+  if (!state.rev) state.rev = checkedOut;
   if (!state.base) state.base = defaultBase(state.head);
   renderBaseSelect();
 }
@@ -351,22 +368,35 @@ async function loadReview(): Promise<void> {
   else await review.load(state.base, state.head);
 }
 
+function persistRev(): void {
+  if (state.repoPath && state.rev) store.setRevFor(state.repoPath, state.rev);
+}
+
+async function loadFiles(): Promise<void> {
+  if (!state.rev) files.clear("Pick a branch to browse.");
+  else await files.load(state.rev, shortRef(state.rev));
+}
+
 function setMode(mode: Mode): void {
   state.mode = mode;
   store.setMode(mode);
-  const reviewing = mode === "review";
-  el.modeGraph.classList.toggle("active", !reviewing);
-  el.modeReview.classList.toggle("active", reviewing);
-  el.main.hidden = reviewing;
-  el.baseControls.hidden = !reviewing;
-  el.toggleDetails.hidden = reviewing;
-  review.setVisible(reviewing);
+  const graphing = mode === "graph";
+  el.modeGraph.classList.toggle("active", graphing);
+  el.modeReview.classList.toggle("active", mode === "review");
+  el.modeFiles.classList.toggle("active", mode === "files");
+  el.main.hidden = !graphing;
+  el.baseControls.hidden = mode !== "review";
+  el.toggleDetails.hidden = !graphing;
+  review.setVisible(mode === "review");
+  files.setVisible(mode === "files");
   // "all"/"none" only make sense for the graph's checkboxes.
   for (const a of document.querySelectorAll<HTMLElement>(".section-actions")) {
-    a.hidden = reviewing;
+    a.hidden = !graphing;
   }
   renderSidebar();
-  if (reviewing && state.repoPath) void loadReview();
+  if (!state.repoPath) return;
+  if (mode === "review") void loadReview();
+  if (mode === "files") void loadFiles();
 }
 
 // --------------------------------------------------------------- commit list
@@ -578,11 +608,13 @@ async function openRepo(path: string): Promise<void> {
   }
   state.head = null;
   state.base = null;
-  syncReviewRefs();
+  state.rev = null;
+  syncRefSelections();
   renderSidebar();
   renderDetails();
   await refreshGraph();
   if (state.mode === "review") await loadReview();
+  if (state.mode === "files") await loadFiles();
 }
 
 /// Re-read refs and commits from disk, keeping the current branch selection
@@ -600,10 +632,14 @@ async function refreshAll(): Promise<void> {
   );
   state.enabled = new Set([...state.enabled].filter((r) => existing.has(r)));
   persistEnabled();
-  syncReviewRefs();
+  syncRefSelections();
   renderSidebar();
   if (state.mode === "review") {
     await loadReview();
+    return;
+  }
+  if (state.mode === "files") {
+    await loadFiles();
     return;
   }
   await refreshGraph();
@@ -639,7 +675,9 @@ function wire(): void {
 
   el.modeGraph.addEventListener("click", () => setMode("graph"));
   el.modeReview.addEventListener("click", () => setMode("review"));
+  el.modeFiles.addEventListener("click", () => setMode("files"));
   review.wire();
+  files.wire();
 
   el.baseRef.addEventListener("change", () => {
     state.base = el.baseRef.value;
@@ -659,6 +697,12 @@ function wire(): void {
         renderBaseSelect();
         persistReview();
         void loadReview();
+        return;
+      }
+      if (state.mode === "files") {
+        state.rev = ref;
+        persistRev();
+        void loadFiles();
         return;
       }
       if (cb.checked) state.enabled.add(ref);
@@ -750,6 +794,7 @@ function wire(): void {
       if (review.moveSelection(delta)) ev.preventDefault();
       return;
     }
+    if (state.mode !== "graph") return;
 
     // When the details pane has focus, arrows move through the diff's files.
     if (state.focus === "files" && !el.details.hidden && state.details?.files.length) {

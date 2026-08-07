@@ -34,6 +34,14 @@
   --stat-del: #cf222e;
   --toast-bg: #2d333b;
   --toast-fg: #ffffff;
+  --code-comment: #6a737d;
+  --code-keyword: #cf222e;
+  --code-string: #0a3069;
+  --code-number: #0550ae;
+  --code-func: #8250df;
+  --code-type: #953800;
+  --code-meta: #6a737d;
+  --code-attr: #116329;
   --lane-0: #2f6fe4;
   --lane-1: #d9822b;
   --lane-2: #38a05c;
@@ -86,6 +94,14 @@
   --stat-del: #f85149;
   --toast-bg: #444c56;
   --toast-fg: #ffffff;
+  --code-comment: #8b949e;
+  --code-keyword: #ff7b72;
+  --code-string: #a5d6ff;
+  --code-number: #79c0ff;
+  --code-func: #d2a8ff;
+  --code-type: #ffa657;
+  --code-meta: #8b949e;
+  --code-attr: #7ee787;
   --lane-0: #5b96f5;
   --lane-1: #e8a04c;
   --lane-2: #4fc57e;
@@ -867,6 +883,173 @@ body {
 .tree-file.selected .filestat,
 .tree-file.selected .status {
   color: var(--sel-text) !important;
+}
+
+/* --------------------------------------------------------------- files view */
+
+#files {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+#files-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+
+#files-path {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.92rem;
+}
+
+.crumb-sep {
+  color: var(--text-dim);
+  padding: 0 2px;
+}
+
+#files-download {
+  flex: none;
+  text-decoration: none;
+}
+
+#files-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+#files-tree {
+  width: 23rem;
+  flex: none;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+  padding: 4px 0;
+}
+
+.kind-tag {
+  flex: none;
+  font-size: 0.77rem;
+  color: var(--text-dim);
+}
+
+#files-view {
+  flex: 1;
+  overflow: auto;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------- source view */
+
+.source {
+  display: flex;
+  align-items: flex-start;
+  min-width: fit-content;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+/* Sticky so the numbers stay put when the code scrolls sideways. */
+.source .gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: none;
+  padding: 8px 10px;
+  text-align: right;
+  color: var(--text-dim);
+  background: var(--bg-alt);
+  border-right: 1px solid var(--border);
+  user-select: none;
+}
+
+.source .code {
+  padding: 8px 12px;
+  white-space: pre;
+}
+
+/* highlight.js tokens, mapped onto the app's palette so both themes work. */
+.hljs-comment,
+.hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-formula {
+  color: var(--code-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: var(--code-string);
+}
+
+.hljs-number,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--code-number);
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-selector-id,
+.hljs-title.function_ {
+  color: var(--code-func);
+}
+
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-title.class_,
+.hljs-built_in,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--code-type);
+}
+
+.hljs-meta,
+.hljs-comment .hljs-doctag,
+.hljs-tag {
+  color: var(--code-meta);
+}
+
+.hljs-name,
+.hljs-attr {
+  color: var(--code-attr);
+}
+
+.hljs-deletion {
+  color: var(--stat-del);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
 }
 
 /* -------------------------------------------------------------- empty state */

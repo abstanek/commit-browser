@@ -27,6 +27,7 @@
         <div class="segmented" role="group" title="Browse the commit graph, or review a branch against its merge target">
           <button id="mode-graph" class="btn">Graph</button>
           <button id="mode-review" class="btn">Review</button>
+          <button id="mode-files" class="btn">Files</button>
         </div>
         <button id="open-repo" class="btn">Open Repository…</button>
         <button id="refresh" class="btn" title="Re-read branches and commits from disk (F5)">
@@ -123,6 +124,19 @@
         <div id="review-body">
           <div id="review-tree"></div>
           <div id="review-diff"></div>
+        </div>
+      </section>
+
+      <section id="files" hidden>
+        <div id="files-head">
+          <span id="files-rev" class="chip local"></span>
+          <div id="files-path"></div>
+          <div class="spacer"></div>
+          <a id="files-download" class="btn" hidden download>Download</a>
+        </div>
+        <div id="files-body">
+          <div id="files-tree"></div>
+          <div id="files-view"></div>
         </div>
       </section>
 

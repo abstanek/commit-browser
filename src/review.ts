@@ -2,7 +2,7 @@ import { backend } from "@backend";
 import type { FileDiff, ReviewResult } from "./api";
 import { statsHtml, STATUS_LETTER } from "./diff";
 import { createDiffPane } from "./diffpane";
-import { $, escapeHtml, formatDate, toast } from "./util";
+import { $, escapeHtml, formatDate, shortRef, toast } from "./util";
 
 /// Pull-request style view: the whole of one branch measured against the
 /// branch it would merge into, with the option to step through the individual
@@ -261,10 +261,6 @@ function render(): void {
 }
 
 // --------------------------------------------------------------------- state
-
-function shortRef(full: string): string {
-  return full.replace(/^refs\/(heads|remotes|tags)\//, "");
-}
 
 /// Show either the whole branch diff or one commit's own changes.
 async function showCommit(id: string): Promise<void> {

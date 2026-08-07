@@ -28,3 +28,8 @@ export function toast(msg: string): void {
 
 export const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
+
+/// "refs/remotes/origin/main" reads as "origin/main".
+export function shortRef(full: string): string {
+  return full.replace(/^refs\/(heads|remotes|tags)\//, "");
+}
