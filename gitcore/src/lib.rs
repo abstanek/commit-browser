@@ -19,6 +19,7 @@ fn err(e: git2::Error) -> String {
 
 const MAX_PATCH_BYTES: usize = 1_000_000;
 const MAX_REVIEW_COMMITS: usize = 2000;
+const MAX_FILE_BYTES: usize = 2_000_000;
 
 #[derive(Serialize, Debug)]
 pub struct RepoInfo {
@@ -129,6 +130,37 @@ pub struct ReviewResult {
     pub behind: usize,
     /// Combined diff from the merge base to head.
     pub files: Vec<FileDiff>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct TreeEntry {
+    pub name: String,
+    /// Path from the root of the repository.
+    pub path: String,
+    /// "dir" | "file" | "symlink" | "submodule"
+    pub kind: String,
+    pub size: u64,
+}
+
+#[derive(Serialize, Debug)]
+pub struct TreeResult {
+    /// The commit `rev` resolved to.
+    pub commit: String,
+    pub short_commit: String,
+    pub path: String,
+    pub entries: Vec<TreeEntry>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct FileContent {
+    pub path: String,
+    pub commit: String,
+    pub short_commit: String,
+    pub size: u64,
+    pub binary: bool,
+    /// True when `text` holds only the first MAX_FILE_BYTES of the file.
+    pub truncated: bool,
+    pub text: String,
 }
 
 pub fn open_repo(path: &str) -> Result<RepoInfo> {
@@ -471,6 +503,126 @@ pub fn review(repo_path: &str, base: &str, head: &str) -> Result<ReviewResult> {
         behind,
         files,
     })
+}
+
+/// The tree at `path` within the commit `rev` names, or the root tree when
+/// `path` is empty.
+fn tree_at<'r>(repo: &'r Repository, commit: &git2::Commit<'r>, path: &str) -> Result<git2::Tree<'r>> {
+    let root = commit.tree().map_err(err)?;
+    if path.is_empty() {
+        return Ok(root);
+    }
+    root.get_path(Path::new(path))
+        .map_err(err)?
+        .to_object(repo)
+        .map_err(err)?
+        .into_tree()
+        .map_err(|_| format!("{path} is not a directory"))
+}
+
+fn entry_kind(entry: &git2::TreeEntry) -> &'static str {
+    match entry.kind() {
+        Some(git2::ObjectType::Tree) => "dir",
+        Some(git2::ObjectType::Commit) => "submodule",
+        // 0o120000 is git's file mode for a symlink.
+        _ if entry.filemode() == 0o120000 => "symlink",
+        _ => "file",
+    }
+}
+
+/// List one directory of the tree at `rev`. Directories sort before files, as
+/// they do in the review tree.
+pub fn list_tree(repo_path: &str, rev: &str, path: &str) -> Result<TreeResult> {
+    let repo = Repository::open(repo_path).map_err(err)?;
+    let commit = resolve_commit(&repo, rev)?;
+    let tree = tree_at(&repo, &commit, path)?;
+
+    let mut entries = Vec::new();
+    for entry in tree.iter() {
+        let name = entry.name().unwrap_or("").to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let kind = entry_kind(&entry);
+        let size = match entry.to_object(&repo).ok().and_then(|o| o.into_blob().ok()) {
+            Some(blob) => blob.size() as u64,
+            None => 0,
+        };
+        entries.push(TreeEntry {
+            path: if path.is_empty() { name.clone() } else { format!("{path}/{name}") },
+            name,
+            kind: kind.to_string(),
+            size,
+        });
+    }
+    entries.sort_by(|a, b| {
+        let dir = |k: &str| k != "dir";
+        dir(&a.kind).cmp(&dir(&b.kind)).then_with(|| a.name.cmp(&b.name))
+    });
+
+    let id = commit.id().to_string();
+    Ok(TreeResult {
+        short_commit: id[..7].to_string(),
+        commit: id,
+        path: path.to_string(),
+        entries,
+    })
+}
+
+fn blob_at<'r>(repo: &'r Repository, commit: &git2::Commit<'r>, path: &str) -> Result<git2::Blob<'r>> {
+    commit
+        .tree()
+        .map_err(err)?
+        .get_path(Path::new(path))
+        .map_err(err)?
+        .to_object(repo)
+        .map_err(err)?
+        .into_blob()
+        .map_err(|_| format!("{path} is not a file"))
+}
+
+/// Read a file as text for display. Binary files and anything past
+/// MAX_FILE_BYTES come back empty and flagged; the raw bytes are still
+/// available through `read_blob`.
+pub fn read_file(repo_path: &str, rev: &str, path: &str) -> Result<FileContent> {
+    let repo = Repository::open(repo_path).map_err(err)?;
+    let commit = resolve_commit(&repo, rev)?;
+    let blob = blob_at(&repo, &commit, path)?;
+    let size = blob.size() as u64;
+    let binary = blob.is_binary();
+
+    let (text, truncated) = if binary {
+        (String::new(), false)
+    } else {
+        let content = String::from_utf8_lossy(blob.content());
+        if content.len() > MAX_FILE_BYTES {
+            let mut end = MAX_FILE_BYTES;
+            while !content.is_char_boundary(end) {
+                end -= 1;
+            }
+            (content[..end].to_string(), true)
+        } else {
+            (content.into_owned(), false)
+        }
+    };
+
+    let id = commit.id().to_string();
+    Ok(FileContent {
+        path: path.to_string(),
+        short_commit: id[..7].to_string(),
+        commit: id,
+        size,
+        binary,
+        truncated,
+        text,
+    })
+}
+
+/// The exact bytes of a file at `rev`, for downloading.
+pub fn read_blob(repo_path: &str, rev: &str, path: &str) -> Result<Vec<u8>> {
+    let repo = Repository::open(repo_path).map_err(err)?;
+    let commit = resolve_commit(&repo, rev)?;
+    Ok(blob_at(&repo, &commit, path)?.content().to_vec())
 }
 
 fn status_name(s: git2::Delta) -> String {
