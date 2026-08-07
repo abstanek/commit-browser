@@ -53,6 +53,20 @@ fn get_review(
     gitcore::review(&current_repo(&state)?, &base, &head)
 }
 
+#[tauri::command]
+fn list_tree(rev: String, path: String, state: State<AppState>) -> Result<gitcore::TreeResult, String> {
+    gitcore::list_tree(&current_repo(&state)?, &rev, &path)
+}
+
+#[tauri::command]
+fn read_file(
+    rev: String,
+    path: String,
+    state: State<AppState>,
+) -> Result<gitcore::FileContent, String> {
+    gitcore::read_file(&current_repo(&state)?, &rev, &path)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -62,7 +76,9 @@ pub fn run() {
             list_refs,
             get_graph,
             get_commit_details,
-            get_review
+            get_review,
+            list_tree,
+            read_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

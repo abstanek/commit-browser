@@ -1,10 +1,12 @@
 import type {
   Backend,
   CommitDetails,
+  FileContent,
   GraphResult,
   RefsResult,
   RepoInfo,
   ReviewResult,
+  TreeResult,
 } from "./api";
 
 /// Requests go to the origin serving the page, so the app works unchanged
@@ -35,5 +37,8 @@ export const backend: Backend = {
   getCommitDetails: (id) => get<CommitDetails>(`commits/${encodeURIComponent(id)}`),
   getReview: (base, head) =>
     get<ReviewResult>(`review?${new URLSearchParams({ base, head })}`),
+  listTree: (rev, path) => get<TreeResult>(`tree?${new URLSearchParams({ rev, path })}`),
+  readFile: (rev, path) => get<FileContent>(`file?${new URLSearchParams({ rev, path })}`),
+  rawUrl: (rev, path) => `/api/raw?${new URLSearchParams({ rev, path })}`,
   fixedRepo: true,
 };

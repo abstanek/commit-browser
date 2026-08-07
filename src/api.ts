@@ -95,6 +95,30 @@ export interface ReviewResult {
   files: FileDiff[];
 }
 
+export interface TreeEntry {
+  name: string;
+  path: string;
+  kind: "dir" | "file" | "symlink" | "submodule";
+  size: number;
+}
+
+export interface TreeResult {
+  commit: string;
+  short_commit: string;
+  path: string;
+  entries: TreeEntry[];
+}
+
+export interface FileContent {
+  path: string;
+  commit: string;
+  short_commit: string;
+  size: number;
+  binary: boolean;
+  truncated: boolean;
+  text: string;
+}
+
 /// The repository access the UI needs from its host. The desktop build talks to
 /// Tauri over IPC and can open any repository; the web build talks to the HTTP
 /// server, which is started pointed at a single repository.
@@ -106,6 +130,11 @@ export interface Backend {
   getCommitDetails(id: string): Promise<CommitDetails>;
   /// Diff `head` against the commit it would merge into, pull-request style.
   getReview(base: string, head: string): Promise<ReviewResult>;
+  /// One directory of the tree at `rev`; empty `path` is the root.
+  listTree(rev: string, path: string): Promise<TreeResult>;
+  readFile(rev: string, path: string): Promise<FileContent>;
+  /// Link that downloads the file, or null on hosts without one.
+  rawUrl(rev: string, path: string): string | null;
   /// True when the host chooses the repository, so the UI hides its
   /// open-repository controls and opens on startup without being asked.
   readonly fixedRepo: boolean;

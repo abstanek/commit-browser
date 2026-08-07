@@ -8,8 +8,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use axum::body::Body;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -116,6 +117,71 @@ async fn review(
     blocking(move || gitcore::review(&dir, &p.base, &p.head)).await
 }
 
+#[derive(serde::Deserialize)]
+struct PathParams {
+    rev: String,
+    /// Empty for the root of the tree.
+    #[serde(default)]
+    path: String,
+}
+
+async fn tree(
+    State(s): State<Arc<AppState>>,
+    Query(p): Query<PathParams>,
+) -> Result<Json<gitcore::TreeResult>, ApiError> {
+    let dir = s.git_dir.clone();
+    blocking(move || gitcore::list_tree(&dir, &p.rev, &p.path)).await
+}
+
+async fn file(
+    State(s): State<Arc<AppState>>,
+    Query(p): Query<PathParams>,
+) -> Result<Json<gitcore::FileContent>, ApiError> {
+    let dir = s.git_dir.clone();
+    blocking(move || gitcore::read_file(&dir, &p.rev, &p.path)).await
+}
+
+/// RFC 6266 attachment header: an ASCII fallback plus the exact name. Both are
+/// escaped, so a file name from the repository cannot inject header syntax.
+fn disposition(name: &str) -> String {
+    let ascii: String = name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || "._-".contains(c) { c } else { '_' })
+        .collect();
+    let ascii = if ascii.is_empty() { "download".to_string() } else { ascii };
+    let mut encoded = String::new();
+    for b in name.as_bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'.' | b'_' | b'-' => {
+                encoded.push(*b as char)
+            }
+            _ => encoded.push_str(&format!("%{b:02X}")),
+        }
+    }
+    format!("attachment; filename=\"{ascii}\"; filename*=UTF-8''{encoded}")
+}
+
+/// The file's bytes as a download.
+async fn raw(
+    State(s): State<Arc<AppState>>,
+    Query(p): Query<PathParams>,
+) -> Result<Response, ApiError> {
+    let dir = s.git_dir.clone();
+    let name = p.path.rsplit('/').next().unwrap_or("download").to_string();
+    let bytes = match tokio::task::spawn_blocking(move || gitcore::read_blob(&dir, &p.rev, &p.path))
+        .await
+    {
+        Ok(Ok(bytes)) => bytes,
+        Ok(Err(e)) => return Err(ApiError(StatusCode::BAD_REQUEST, e)),
+        Err(e) => return Err(ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    };
+    Response::builder()
+        .header(header::CONTENT_TYPE, "application/octet-stream")
+        .header(header::CONTENT_DISPOSITION, disposition(&name))
+        .body(Body::from(bytes))
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
 async fn commit(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -155,6 +221,9 @@ async fn main() -> ExitCode {
         .route("/api/refs", get(refs))
         .route("/api/graph", get(graph))
         .route("/api/review", get(review))
+        .route("/api/tree", get(tree))
+        .route("/api/file", get(file))
+        .route("/api/raw", get(raw))
         .route("/api/commits/{id}", get(commit))
         .fallback_service(files)
         .with_state(Arc::new(AppState { git_dir: info.git_dir }));

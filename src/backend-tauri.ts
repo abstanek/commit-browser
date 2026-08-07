@@ -3,10 +3,12 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type {
   Backend,
   CommitDetails,
+  FileContent,
   GraphResult,
   RefsResult,
   RepoInfo,
   ReviewResult,
+  TreeResult,
 } from "./api";
 
 export const backend: Backend = {
@@ -15,6 +17,10 @@ export const backend: Backend = {
   getGraph: (branches, limit) => invoke<GraphResult>("get_graph", { branches, limit }),
   getCommitDetails: (id) => invoke<CommitDetails>("get_commit_details", { id }),
   getReview: (base, head) => invoke<ReviewResult>("get_review", { base, head }),
+  listTree: (rev, path) => invoke<TreeResult>("list_tree", { rev, path }),
+  readFile: (rev, path) => invoke<FileContent>("read_file", { rev, path }),
+  // Downloading is an HTTP idea; the desktop build hides the link.
+  rawUrl: () => null,
   fixedRepo: false,
   async pickRepo() {
     const dir = await openDialog({ directory: true, title: "Open git repository" });
