@@ -315,6 +315,84 @@ fn review_accepts_raw_commit_ids() {
     assert_eq!(r.merge_base, Some(b.to_string()));
 }
 
+/// A commit with nested directories, for the file browser tests.
+fn nested() -> (TestRepo, Oid) {
+    let t = TestRepo::new();
+    // Scoped so the builders, which borrow the repo, are gone before t moves.
+    let oid = {
+        let sig = Signature::new("Test", "test@example.com", &Time::new(t.clock, 0)).unwrap();
+        let blob = t.repo.blob(b"fn main() {}\n").unwrap();
+        let readme = t.repo.blob(b"# Title\n").unwrap();
+        let mut inner = t.repo.treebuilder(None).unwrap();
+        inner.insert("main.rs", blob, 0o100644).unwrap();
+        let inner_id = inner.write().unwrap();
+        let mut root = t.repo.treebuilder(None).unwrap();
+        root.insert("src", inner_id, 0o040000).unwrap();
+        root.insert("README.md", readme, 0o100644).unwrap();
+        let tree = t.repo.find_tree(root.write().unwrap()).unwrap();
+        t.repo.commit(None, &sig, &sig, "nested", &tree, &[]).unwrap()
+    };
+    t.repo.reference("refs/heads/main", oid, true, "test").unwrap();
+    (t, oid)
+}
+
+#[test]
+fn tree_listing_puts_directories_first() {
+    let (t, oid) = nested();
+    let root = list_tree(&t.path, "refs/heads/main", "").unwrap();
+    assert_eq!(root.commit, oid.to_string());
+    let names: Vec<_> = root.entries.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names, vec!["src", "README.md"]);
+    assert_eq!(root.entries[0].kind, "dir");
+    assert_eq!(root.entries[1].kind, "file");
+    assert_eq!(root.entries[1].size, 8);
+
+    let sub = list_tree(&t.path, "refs/heads/main", "src").unwrap();
+    assert_eq!(sub.path, "src");
+    assert_eq!(sub.entries.len(), 1);
+    assert_eq!(sub.entries[0].path, "src/main.rs");
+}
+
+#[test]
+fn tree_listing_rejects_a_file_path() {
+    let (t, _) = nested();
+    assert!(list_tree(&t.path, "refs/heads/main", "README.md").is_err());
+}
+
+#[test]
+fn read_file_and_blob() {
+    let (t, oid) = nested();
+    let f = read_file(&t.path, "refs/heads/main", "src/main.rs").unwrap();
+    assert_eq!(f.text, "fn main() {}\n");
+    assert_eq!(f.size, 13);
+    assert!(!f.binary && !f.truncated);
+    assert_eq!(f.commit, oid.to_string());
+
+    // Raw bytes come back untouched, and any rev spelling resolves.
+    assert_eq!(read_blob(&t.path, &oid.to_string(), "README.md").unwrap(), b"# Title\n");
+    assert!(read_file(&t.path, "refs/heads/main", "nope.txt").is_err());
+    assert!(read_file(&t.path, "refs/heads/main", "src").is_err());
+}
+
+#[test]
+fn read_file_flags_binary_content() {
+    let t = TestRepo::new();
+    let sig = Signature::new("Test", "test@example.com", &Time::new(t.clock, 0)).unwrap();
+    let blob = t.repo.blob(&[0u8, 1, 2, 0, 3, 4]).unwrap();
+    let mut root = t.repo.treebuilder(None).unwrap();
+    root.insert("data.bin", blob, 0o100644).unwrap();
+    let tree = t.repo.find_tree(root.write().unwrap()).unwrap();
+    let oid = t.repo.commit(None, &sig, &sig, "binary", &tree, &[]).unwrap();
+    t.repo.reference("refs/heads/main", oid, true, "test").unwrap();
+
+    let f = read_file(&t.path, "refs/heads/main", "data.bin").unwrap();
+    assert!(f.binary);
+    assert!(f.text.is_empty());
+    assert_eq!(f.size, 6);
+    // The bytes are still downloadable even though they are not displayable.
+    assert_eq!(read_blob(&t.path, "refs/heads/main", "data.bin").unwrap().len(), 6);
+}
+
 #[test]
 fn merge_commit_layout() {
     let (t, oids) = sample();
