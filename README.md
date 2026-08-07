@@ -9,6 +9,9 @@ Two views, switched from the toolbar:
 - **Review** - one branch against the branch it would merge into, pull-request
   style: the whole branch diff as a file tree, and a picker to step through the
   branch's individual commits
+- **Files** - the repository as it stands at one branch, with syntax-highlighted
+  sources. In the web variant each file also has a download link; the desktop
+  build has no equivalent and leaves the button out
 
 It comes in two variants that share the frontend (`src/`) and all repository
 reading (`gitcore/`):
