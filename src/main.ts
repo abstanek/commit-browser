@@ -365,7 +365,7 @@ function persistReview(): void {
 async function loadReview(): Promise<void> {
   if (!state.head) review.clear("Pick a branch to review.");
   else if (!state.base) review.clear("There is no other branch to merge into.");
-  else await review.load(state.base, state.head);
+  else await review.load(state.repoPath ?? "", state.base, state.head);
 }
 
 function persistRev(): void {
@@ -560,7 +560,7 @@ function renderDetails(): void {
       );
     })
     .join("");
-  detailPane.show(d.files, "No changes vs first parent.");
+  detailPane.show(d.files, "No changes vs first parent.", `${state.repoPath}|${d.id}`);
 }
 
 function setDetailsVisible(visible: boolean): void {

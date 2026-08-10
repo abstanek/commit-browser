@@ -34,6 +34,7 @@
   --stat-del: #cf222e;
   --toast-bg: #2d333b;
   --toast-fg: #ffffff;
+  --pick-bg: #fff3c4;
   --code-comment: #6a737d;
   --code-keyword: #cf222e;
   --code-string: #0a3069;
@@ -94,6 +95,7 @@
   --stat-del: #f85149;
   --toast-bg: #444c56;
   --toast-fg: #ffffff;
+  --pick-bg: #3d3116;
   --code-comment: #8b949e;
   --code-keyword: #ff7b72;
   --code-string: #a5d6ff;
@@ -709,6 +711,51 @@ body {
 .dl.del { background: var(--diff-del-bg); }
 .dl.hunk { background: var(--diff-hunk-bg); color: var(--diff-hunk-fg); }
 .dl.meta { color: var(--diff-meta-fg); }
+
+/* ------------------------------------------------------------ folded lines */
+
+.dl[data-line] {
+  cursor: default;
+}
+
+.dl.picked {
+  background: var(--pick-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.dl.fold {
+  color: var(--text-dim);
+  background: var(--bg-alt);
+  border-top: 1px dashed var(--border);
+  border-bottom: 1px dashed var(--border);
+  cursor: pointer;
+  padding-left: 10px;
+}
+
+.dl.fold:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.hunk-toggle {
+  display: inline-block;
+  width: 1.1rem;
+  margin-left: -0.2rem;
+  color: var(--diff-hunk-fg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.diff-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  flex: none;
+}
+
+.fold-action {
+  white-space: nowrap;
+}
 
 .detail-empty {
   padding: 14px;

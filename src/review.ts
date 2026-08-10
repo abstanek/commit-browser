@@ -11,6 +11,8 @@ import { $, escapeHtml, formatDate, shortRef, toast } from "./util";
 const ALL = "all";
 
 interface ReviewState {
+  /// Repository this comparison belongs to, for keying stored state.
+  repo: string;
   base: string | null;
   head: string | null;
   result: ReviewResult | null;
@@ -27,6 +29,7 @@ interface ReviewState {
 }
 
 const rs: ReviewState = {
+  repo: "",
   base: null,
   head: null,
   result: null,
@@ -257,7 +260,8 @@ function render(): void {
   renderCommitSelect();
   renderMessage();
   renderTree();
-  pane.show(rs.files, emptyReason());
+  // Folds belong to one comparison and one commit within it.
+  pane.show(rs.files, emptyReason(), `${rs.repo}|${rs.base}..${rs.head}|${rs.showing}`);
 }
 
 // --------------------------------------------------------------------- state
@@ -279,7 +283,8 @@ async function showCommit(id: string): Promise<void> {
   render();
 }
 
-export async function load(base: string, head: string): Promise<void> {
+export async function load(repo: string, base: string, head: string): Promise<void> {
+  rs.repo = repo;
   rs.base = base;
   rs.head = head;
   try {

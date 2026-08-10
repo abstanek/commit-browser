@@ -1,4 +1,5 @@
 import type { FileDiff } from "./api";
+import { coversRange, rangeAt, type Range } from "./collapse";
 import { escapeHtml } from "./util";
 
 export const STATUS_LETTER: Record<string, string> = {
@@ -23,21 +24,61 @@ export function fileLabel(f: FileDiff): string {
     : escapeHtml(f.path);
 }
 
-/// A unified patch as coloured lines.
-export function patchHtml(f: FileDiff): string {
+function lineClass(line: string): string {
+  if (line.startsWith("@@")) return "hunk";
+  if (line.startsWith("+++") || line.startsWith("---")) return "meta";
+  if (line.startsWith("diff --git") || line.startsWith("index ")) return "meta";
+  if (line.startsWith("new file") || line.startsWith("deleted file")) return "meta";
+  if (line.startsWith("similarity") || line.startsWith("rename")) return "meta";
+  if (line.startsWith("+")) return "add";
+  if (line.startsWith("-")) return "del";
+  return "ctx";
+}
+
+/// Where each hunk's body starts and ends: from just after its @@ header to
+/// the line before the next one.
+export function hunkBodies(lines: string[]): Map<number, Range> {
+  const heads = lines.flatMap((l, i) => (l.startsWith("@@") ? [i] : []));
+  const bodies = new Map<number, Range>();
+  heads.forEach((head, k) => {
+    const end = (heads[k + 1] ?? lines.length) - 1;
+    if (end > head) bodies.set(head, [head + 1, end]);
+  });
+  return bodies;
+}
+
+/// A unified patch as coloured lines. Lines inside a folded range collapse to a
+/// single placeholder, and hunk headers carry the extent of their body so they
+/// can be folded whole.
+export function patchHtml(f: FileDiff, folds: Range[] = []): string {
   if (f.binary) return `<div class="detail-empty">Binary file.</div>`;
+  const lines = f.patch.split("\n");
+  const bodies = hunkBodies(lines);
   const out: string[] = [];
-  for (const line of f.patch.split("\n")) {
-    let cls = "ctx";
-    if (line.startsWith("@@")) cls = "hunk";
-    else if (line.startsWith("+++") || line.startsWith("---")) cls = "meta";
-    else if (line.startsWith("diff --git") || line.startsWith("index ")) cls = "meta";
-    else if (line.startsWith("new file") || line.startsWith("deleted file")) cls = "meta";
-    else if (line.startsWith("similarity") || line.startsWith("rename")) cls = "meta";
-    else if (line.startsWith("+")) cls = "add";
-    else if (line.startsWith("-")) cls = "del";
-    out.push(`<div class="dl ${cls}">${escapeHtml(line) || " "}</div>`);
+
+  for (let i = 0; i < lines.length; i++) {
+    const fold = rangeAt(folds, i);
+    if (fold) {
+      const hidden = fold[1] - fold[0] + 1;
+      out.push(
+        `<div class="dl fold" data-fold="${fold[0]}" data-fold-end="${fold[1]}">` +
+          `⋯ ${hidden} line${hidden === 1 ? "" : "s"} hidden</div>`,
+      );
+      i = fold[1];
+      continue;
+    }
+    const line = lines[i];
+    const cls = lineClass(line);
+    const body = bodies.get(i);
+    const toggle = body
+      ? `<span class="hunk-toggle" data-body="${body[0]}" data-body-end="${body[1]}">` +
+        `${coversRange(folds, body[0], body[1]) ? "▸" : "▾"}</span>`
+      : "";
+    out.push(
+      `<div class="dl ${cls}" data-line="${i}">${toggle}${escapeHtml(line) || " "}</div>`,
+    );
   }
+
   if (f.truncated) {
     out.push(`<div class="dl meta">… patch truncated (too large) …</div>`);
   }
