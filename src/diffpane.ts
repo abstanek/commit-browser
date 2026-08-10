@@ -48,23 +48,34 @@ export function createDiffPane(root: HTMLElement): DiffPane {
     return files[index].patch.split("\n").length;
   }
 
-  function blockHtml(f: FileDiff, index: number): string {
-    const hidden = folds[index] ?? [];
+  function actionsHtml(index: number): string {
     const count = picked ? Math.abs(picked.to - picked.from) + 1 : 0;
     const selection =
       picked?.file === index
         ? `<button class="linkbtn fold-action" data-fold-selection>` +
           `Hide ${count} line${count === 1 ? "" : "s"}</button>`
         : "";
-    const expand = hidden.length
+    const expand = (folds[index] ?? []).length
       ? `<button class="linkbtn fold-action" data-unfold-all>Show all</button>`
       : "";
+    return selection + expand;
+  }
+
+  /// Refresh a header in place, so picking lines does not disturb the patch
+  /// under the pointer mid-drag.
+  function updateActions(index: number): void {
+    const actions = blockAt(index)?.querySelector(".diff-actions");
+    if (actions) actions.innerHTML = actionsHtml(index);
+  }
+
+  function blockHtml(f: FileDiff, index: number): string {
+    const hidden = folds[index] ?? [];
     return (
       `<section class="diff-block" data-i="${index}">` +
       `<div class="diff-head">` +
       `<span class="status ${f.status}">${STATUS_LETTER[f.status] ?? "?"}</span>` +
       `<span class="diff-path">${fileLabel(f)}</span>${statsHtml(f)}` +
-      `<span class="diff-actions">${selection}${expand}</span></div>` +
+      `<span class="diff-actions">${actionsHtml(index)}</span></div>` +
       patchHtml(f, hidden) +
       `</section>`
     );
@@ -97,23 +108,21 @@ export function createDiffPane(root: HTMLElement): DiffPane {
     }
   }
 
-  /// Clicking a line starts a selection; shift-clicking extends it.
-  function pickLine(index: number, line: number, extend: boolean): void {
+  function setPick(index: number, from: number, to: number): void {
     const previous = picked?.file ?? null;
-    picked =
-      extend && picked?.file === index
-        ? { file: index, from: picked.from, to: line }
-        : { file: index, from: line, to: line };
-    // Both blocks are redrawn: one loses the Hide button, the other gains it.
-    if (previous !== null && previous !== index) redraw(previous);
-    redraw(index);
+    picked = { file: index, from, to };
+    markSelection();
+    // One header loses the Hide button as the other gains it.
+    if (previous !== null && previous !== index) updateActions(previous);
+    updateActions(index);
   }
 
   function clearPick(): void {
     if (!picked) return;
     const index = picked.file;
     picked = null;
-    redraw(index);
+    markSelection();
+    updateActions(index);
   }
 
   function renderThrough(index: number): void {
@@ -177,20 +186,56 @@ export function createDiffPane(root: HTMLElement): DiffPane {
       setFolds(index, removeRange(folds[index] ?? [], from, Number(fold.dataset.foldEnd)));
       return;
     }
-    const line = target.closest<HTMLElement>(".dl[data-line]");
-    // Dragging out a text selection to copy must not count as picking lines,
-    // but a shift-click is a range pick even though text is selected.
-    const dragged = !(window.getSelection()?.isCollapsed ?? true);
-    if (line && (ev.shiftKey || !dragged)) {
-      pickLine(index, Number(line.dataset.line), ev.shiftKey);
+  });
+
+  /// Line picking is a drag: press on a line, pull across the range, release.
+  /// The browser's own text selection is left to run alongside and settled up
+  /// on release, so selecting a bit of text to copy still works.
+  let dragging = false;
+
+  function lineUnder(target: EventTarget | null): { file: number; line: number } | null {
+    const el = target as HTMLElement | null;
+    const line = el?.closest<HTMLElement>(".dl[data-line]");
+    const block = el?.closest<HTMLElement>(".diff-block");
+    if (!line || !block) return null;
+    return { file: Number(block.dataset.i), line: Number(line.dataset.line) };
+  }
+
+  root.addEventListener("mousedown", (ev) => {
+    const target = ev.target as HTMLElement;
+    if (ev.button !== 0 || target.closest("button, .hunk-toggle, .dl.fold")) return;
+    const at = lineUnder(target);
+    if (!at) return;
+    dragging = true;
+    // Shift keeps the existing anchor, for anyone who reaches for it.
+    if (ev.shiftKey && picked?.file === at.file) setPick(at.file, picked.from, at.line);
+    else setPick(at.file, at.line, at.line);
+  });
+
+  root.addEventListener("mousemove", (ev) => {
+    if (!dragging || ev.buttons === 0 || !picked) return;
+    const at = lineUnder(ev.target);
+    if (!at || at.file !== picked.file || at.line === picked.to) return;
+    setPick(picked.file, picked.from, at.line);
+    // Once the drag spans lines it is a pick, not a copy: take the text
+    // selection off the screen and stop it growing.
+    if (picked.from !== picked.to) {
+      root.classList.add("picking-lines");
+      window.getSelection()?.removeAllRanges();
     }
   });
 
-  // Without this, shift-clicking a line extends the browser's text selection
-  // across the diff instead of picking a range.
-  root.addEventListener("mousedown", (ev) => {
-    if (ev.shiftKey && (ev.target as HTMLElement).closest(".dl[data-line]")) {
-      ev.preventDefault();
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    root.classList.remove("picking-lines");
+    const selection = window.getSelection();
+    if (picked && picked.from !== picked.to) {
+      // Dragging across lines picked them; drop the text it selected on the way.
+      selection?.removeAllRanges();
+    } else if (!(selection?.isCollapsed ?? true)) {
+      // Text was dragged out within one line: that was a copy, not a pick.
+      clearPick();
     }
   });
 
