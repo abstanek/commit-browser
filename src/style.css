@@ -140,9 +140,27 @@ body {
   height: 100vh;
   display: grid;
   grid-template:
-    "toolbar toolbar" auto
-    "sidebar main" 1fr
-    / 17.7rem 1fr;
+    "toolbar toolbar toolbar" auto
+    "sidebar vsplit main" 1fr
+    / var(--sidebar-w, 17.7rem) 5px 1fr;
+}
+
+/* Vertical dividers; each one resizes the pane to its left. */
+.vsplit {
+  flex: none;
+  width: 5px;
+  background: var(--bg-alt);
+  border-right: 1px solid var(--border);
+  cursor: col-resize;
+}
+
+.vsplit:hover,
+.vsplit.dragging {
+  background: var(--splitter-hover);
+}
+
+#sidebar-splitter {
+  grid-area: vsplit;
 }
 
 /* ------------------------------------------------------------------ toolbar */
@@ -221,7 +239,6 @@ body {
 #sidebar {
   grid-area: sidebar;
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
   overflow-y: auto;
   padding: 10px 0;
 }
@@ -615,10 +632,9 @@ body {
 }
 
 #file-list {
-  width: 22.3rem;
+  width: var(--detail-list-w, 22.3rem);
   flex: none;
   overflow-y: auto;
-  border-right: 1px solid var(--border);
   padding: 4px 0;
 }
 
@@ -914,10 +930,9 @@ body {
 }
 
 #review-tree {
-  width: 23rem;
+  width: var(--review-tree-w, 23rem);
   flex: none;
   overflow: auto;
-  border-right: 1px solid var(--border);
   padding: 4px 0;
 }
 
@@ -1006,10 +1021,9 @@ body {
 }
 
 #files-tree {
-  width: 23rem;
+  width: var(--files-tree-w, 23rem);
   flex: none;
   overflow: auto;
-  border-right: 1px solid var(--border);
   padding: 4px 0;
 }
 

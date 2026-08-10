@@ -3,6 +3,7 @@ import type { BranchInfo, CommitDetails, GraphResult, RefsResult } from "./api";
 import { fileLabel, statsHtml, STATUS_LETTER } from "./diff";
 import { createDiffPane } from "./diffpane";
 import * as files from "./files";
+import { applyPanes, wirePanes } from "./panes";
 import { graphWidthPx, renderGraph, rowHeight } from "./graph";
 import * as review from "./review";
 import { $, escapeHtml, formatDate, shortRef, toast } from "./util";
@@ -921,9 +922,11 @@ function wire(): void {
 async function init(): Promise<void> {
   wire();
   wireColumns();
+  wirePanes();
   applyTheme();
   applyFontSize(store.fontSize());
   applyColumns();
+  applyPanes();
   applySectionCollapse();
   setFocus("commits");
   el.branchSort.value = store.branchSort();
