@@ -384,12 +384,34 @@ body {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+/* The three right-hand widths are set by dragging the header grips; the
+   description column takes whatever is left. */
 #list-header,
 .row {
   display: grid;
-  grid-template-columns: var(--graph-w) minmax(23rem, 1fr) 13rem 12.3rem 6.2rem;
+  grid-template-columns:
+    var(--graph-w) minmax(23rem, 1fr)
+    var(--col-author, 13rem) var(--col-date, 12.3rem) var(--col-sha, 6.2rem);
   align-items: center;
   min-width: fit-content;
+}
+
+#list-header .cell {
+  position: relative;
+}
+
+.col-grip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+}
+
+.col-grip:hover,
+.col-grip.dragging {
+  background: var(--splitter-hover);
 }
 
 #list-header {

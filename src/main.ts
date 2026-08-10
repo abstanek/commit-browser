@@ -128,6 +128,13 @@ const store = {
   setReviewFor(repo: string, base: string, head: string) {
     localStorage.setItem(`review:${repo}`, JSON.stringify({ base, head }));
   },
+  columns(): ColumnWidths {
+    const raw = localStorage.getItem("columns");
+    return { ...COLUMN_DEFAULTS, ...(raw ? (JSON.parse(raw) as ColumnWidths) : {}) };
+  },
+  setColumns(widths: ColumnWidths) {
+    localStorage.setItem("columns", JSON.stringify(widths));
+  },
   collapsedSections(): Set<string> {
     const raw = localStorage.getItem("collapsedSections");
     return new Set(raw ? (JSON.parse(raw) as string[]) : []);
@@ -139,6 +146,67 @@ const store = {
 
 type BranchSort = "recent" | "name";
 type ThemePref = "system" | "light" | "dark";
+
+// ------------------------------------------------------------- list columns
+
+/// Widths in rem, so a column keeps its proportions when the text size
+/// changes. The description column is not listed: it takes what is left.
+type ColumnWidths = Record<"author" | "date" | "sha", number>;
+
+const COLUMN_DEFAULTS: ColumnWidths = { author: 13, date: 12.3, sha: 6.2 };
+const COLUMN_MIN_PX = 40;
+const COLUMN_MAX_PX = 800;
+
+function setColumnVar(key: keyof ColumnWidths, rem: number): void {
+  el.commitList.style.setProperty(`--col-${key}`, `${rem}rem`);
+}
+
+function applyColumns(): void {
+  const widths = store.columns();
+  for (const key of Object.keys(COLUMN_DEFAULTS) as (keyof ColumnWidths)[]) {
+    setColumnVar(key, widths[key]);
+  }
+}
+
+function rootFontSize(): number {
+  return parseFloat(getComputedStyle(document.documentElement).fontSize);
+}
+
+/// Drag a header grip to resize its column; double-click to put it back.
+function wireColumns(): void {
+  for (const grip of document.querySelectorAll<HTMLElement>(".col-grip")) {
+    const key = grip.dataset.col as keyof ColumnWidths;
+    grip.addEventListener("mousedown", (down) => {
+      down.preventDefault();
+      const startX = down.clientX;
+      const startW = grip.parentElement!.getBoundingClientRect().width;
+      let rem = store.columns()[key];
+      grip.classList.add("dragging");
+      const move = (ev: MouseEvent) => {
+        const px = Math.min(
+          Math.max(COLUMN_MIN_PX, startW + ev.clientX - startX),
+          COLUMN_MAX_PX,
+        );
+        rem = px / rootFontSize();
+        setColumnVar(key, rem);
+      };
+      const up = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+        grip.classList.remove("dragging");
+        // Written once at the end rather than on every pixel of the drag.
+        store.setColumns({ ...store.columns(), [key]: rem });
+      };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    });
+
+    grip.addEventListener("dblclick", () => {
+      store.setColumns({ ...store.columns(), [key]: COLUMN_DEFAULTS[key] });
+      applyColumns();
+    });
+  }
+}
 
 // ------------------------------------------------------------- theme and size
 
@@ -852,8 +920,10 @@ function wire(): void {
 
 async function init(): Promise<void> {
   wire();
+  wireColumns();
   applyTheme();
   applyFontSize(store.fontSize());
+  applyColumns();
   applySectionCollapse();
   setFocus("commits");
   el.branchSort.value = store.branchSort();
