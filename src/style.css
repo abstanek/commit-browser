@@ -897,12 +897,40 @@ body {
 
 #review-message {
   flex: none;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
   padding: 5px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 0.92rem;
+  /* A long message scrolls rather than crowding out the diff. */
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+.message-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.msg-toggle {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.77rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.msg-toggle:hover {
+  color: var(--accent);
+}
+
+.message-body {
+  margin-top: 4px;
+  font: inherit;
+  font-family: inherit;
+  white-space: pre-wrap;
 }
 
 #review-message .sha {

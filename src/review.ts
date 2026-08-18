@@ -18,6 +18,9 @@ interface ReviewState {
   result: ReviewResult | null;
   /// Commit id whose own diff is shown, or ALL for the whole branch.
   showing: string;
+  /// Full message of that commit, once fetched with its diff.
+  message: string | null;
+  expanded: boolean;
   files: FileDiff[];
   selected: number;
   collapsed: Set<string>;
@@ -34,6 +37,8 @@ const rs: ReviewState = {
   head: null,
   result: null,
   showing: ALL,
+  message: null,
+  expanded: localStorage.getItem("reviewMessageExpanded") === "1",
   files: [],
   selected: 0,
   collapsed: new Set(),
@@ -244,15 +249,29 @@ function emptyReason(): string {
     : "This commit changes no files.";
 }
 
-/// The commit message of whichever single commit is being shown.
+/// The commit message of whichever single commit is being shown: its summary,
+/// which is all most commits need, expanding to the whole message on request.
+/// Expanded or not is remembered, since it is a habit rather than a per-commit
+/// decision.
 function renderMessage(): void {
   const c = rs.result?.commits.find((x) => x.id === rs.showing);
   el.message.hidden = !c;
   if (!c) return;
+  const full = (rs.message ?? "").trimEnd();
+  const hasMore = full.trim() !== c.summary.trim();
+  const open = hasMore && rs.expanded;
   el.message.innerHTML =
+    `<div class="message-line">` +
     `<span class="sha">${c.short_id}</span>` +
-    `<span class="msg">${escapeHtml(c.summary)}</span>` +
-    `<span class="dim">${escapeHtml(c.author)}, ${formatDate(c.time)}</span>`;
+    (hasMore
+      ? `<button class="msg-toggle" title="${open ? "Show just the summary" : "Show the whole message"}">` +
+        `${open ? "▾" : "▸"}</button>`
+      : "") +
+    // Expanded, the body below already opens with the summary.
+    (open ? "" : `<span class="msg">${escapeHtml(c.summary)}</span>`) +
+    `<span class="dim">${escapeHtml(c.author)}, ${formatDate(c.time)}</span>` +
+    `</div>` +
+    (open ? `<pre class="message-body">${escapeHtml(full)}</pre>` : "");
 }
 
 function render(): void {
@@ -270,11 +289,14 @@ function render(): void {
 async function showCommit(id: string): Promise<void> {
   rs.showing = id;
   rs.selected = 0;
+  rs.message = null;
   if (id === ALL) {
     rs.files = inTreeOrder(rs.result?.files ?? []);
   } else {
     try {
-      rs.files = inTreeOrder((await backend.getCommitDetails(id)).files);
+      const details = await backend.getCommitDetails(id);
+      rs.files = inTreeOrder(details.files);
+      rs.message = details.message;
     } catch (e) {
       toast(`Failed to load commit: ${e}`);
       rs.files = [];
@@ -341,6 +363,13 @@ function step(delta: number): void {
 }
 
 export function wire(): void {
+  el.message.addEventListener("click", (ev) => {
+    if (!(ev.target as HTMLElement).closest(".msg-toggle")) return;
+    rs.expanded = !rs.expanded;
+    localStorage.setItem("reviewMessageExpanded", rs.expanded ? "1" : "0");
+    renderMessage();
+  });
+
   el.commitSelect.addEventListener("change", () => void showCommit(el.commitSelect.value));
   el.prev.addEventListener("click", () => step(-1));
   el.next.addEventListener("click", () => step(1));
