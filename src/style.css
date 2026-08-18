@@ -154,8 +154,18 @@ body {
   cursor: col-resize;
 }
 
+.hsplit {
+  flex: none;
+  height: 5px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  cursor: row-resize;
+}
+
 .vsplit:hover,
-.vsplit.dragging {
+.vsplit.dragging,
+.hsplit:hover,
+.hsplit.dragging {
   background: var(--splitter-hover);
 }
 
@@ -900,9 +910,15 @@ body {
   padding: 5px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 0.92rem;
-  /* A long message scrolls rather than crowding out the diff. */
-  max-height: 40%;
+}
+
+/* Expanded, the bar keeps a fixed height whatever the message says, so the
+   diff below it does not jump as you step through commits. Its own splitter
+   draws the line, so the bar drops its border. */
+#review-message.expanded {
+  height: var(--review-message-h, 7rem);
   overflow-y: auto;
+  border-bottom: none;
 }
 
 .message-line {

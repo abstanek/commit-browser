@@ -55,6 +55,7 @@ const el = {
   tree: $("review-tree"),
   diff: $("review-diff"),
   message: $("review-message"),
+  messageSplitter: $("review-message-splitter"),
 };
 
 const pane = createDiffPane(el.diff);
@@ -256,14 +257,18 @@ function emptyReason(): string {
 function renderMessage(): void {
   const c = rs.result?.commits.find((x) => x.id === rs.showing);
   el.message.hidden = !c;
+  el.messageSplitter.hidden = !c || !rs.expanded;
+  el.message.classList.toggle("expanded", rs.expanded);
   if (!c) return;
   const full = (rs.message ?? "").trimEnd();
+  // Expanded stays expanded even for a one-line message, so that stepping
+  // through commits does not move the diff up and down.
+  const open = rs.expanded;
   const hasMore = full.trim() !== c.summary.trim();
-  const open = hasMore && rs.expanded;
   el.message.innerHTML =
     `<div class="message-line">` +
     `<span class="sha">${c.short_id}</span>` +
-    (hasMore
+    (hasMore || open
       ? `<button class="msg-toggle" title="${open ? "Show just the summary" : "Show the whole message"}">` +
         `${open ? "▾" : "▸"}</button>`
       : "") +
