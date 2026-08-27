@@ -138,6 +138,9 @@ export interface Backend {
   /// True when the host chooses the repository, so the UI hides its
   /// open-repository controls and opens on startup without being asked.
   readonly fixedRepo: boolean;
+  /// True when the host has a real URL, so the app's position can live in the
+  /// address bar and be walked with back and forward.
+  readonly routable: boolean;
   /// Directory picker; only present when `fixedRepo` is false.
   pickRepo?(): Promise<string | null>;
 }

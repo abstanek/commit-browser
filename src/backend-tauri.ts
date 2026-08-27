@@ -22,6 +22,8 @@ export const backend: Backend = {
   // Downloading is an HTTP idea; the desktop build hides the link.
   rawUrl: () => null,
   fixedRepo: false,
+  // The window has no address bar, and the webview's URL is not a place.
+  routable: false,
   async pickRepo() {
     const dir = await openDialog({ directory: true, title: "Open git repository" });
     return typeof dir === "string" ? dir : null;

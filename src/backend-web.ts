@@ -41,4 +41,5 @@ export const backend: Backend = {
   readFile: (rev, path) => get<FileContent>(`file?${new URLSearchParams({ rev, path })}`),
   rawUrl: (rev, path) => `/api/raw?${new URLSearchParams({ rev, path })}`,
   fixedRepo: true,
+  routable: true,
 };

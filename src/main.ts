@@ -4,6 +4,7 @@ import { fileLabel, statsHtml, STATUS_LETTER } from "./diff";
 import { createDiffPane } from "./diffpane";
 import * as files from "./files";
 import { applyPanes, wirePanes } from "./panes";
+import { fromUrl, type Route, sameUrl, toUrl } from "./router";
 import { graphWidthPx, renderGraph, rowHeight } from "./graph";
 import * as review from "./review";
 import { $, escapeHtml, formatDate, shortRef, toast } from "./util";
@@ -435,9 +436,15 @@ function persistReview(): void {
 }
 
 async function loadReview(): Promise<void> {
+  const showing = pendingShowing;
+  pendingShowing = null;
   if (!state.head) review.clear("Pick a branch to review.");
   else if (!state.base) review.clear("There is no other branch to merge into.");
-  else await review.load(state.repoPath ?? "", state.base, state.head);
+  else {
+    await review.load(state.repoPath ?? "", state.base, state.head, showing ?? undefined);
+  }
+  // Which commit ended up on screen is only known now, so complete the entry.
+  syncUrl(true);
 }
 
 function persistRev(): void {
@@ -463,6 +470,8 @@ async function loadFiles(): Promise<void> {
   const commit = isCommitRev(state.rev);
   const label = commit ? state.rev.slice(0, 7) : shortRef(state.rev);
   await files.load(state.rev, label, commit, open ?? undefined);
+  // Which file ended up open is only known now, so complete the entry.
+  syncUrl(true);
 }
 
 /// Follow a diff's file into the files view, at the revision it was read from.
@@ -473,7 +482,91 @@ function openInFiles(rev: string, path: string): void {
   setMode("files");
 }
 
-function setMode(mode: Mode): void {
+// -------------------------------------------------------------------- routing
+
+/// Set while a URL is being applied, so restoring a position does not record
+/// it again as a new one.
+let applyingRoute = false;
+/// A position from the address bar, waiting for the repository to open.
+let startRoute: Route | null = null;
+/// Commit the review should show once its comparison has loaded.
+let pendingShowing: string | null = null;
+
+function refParam(full: string): string {
+  return isCommitRev(full) ? full : shortRef(full);
+}
+
+/// The branch a short name from the URL refers to, preferring local ones, or
+/// the name itself when it looks like a commit.
+function resolveRef(name: string | undefined): string | null {
+  if (!name) return null;
+  const match =
+    state.refs?.locals.find((b) => b.name === name) ??
+    state.refs?.remotes.find((b) => b.name === name);
+  if (match) return match.full_name;
+  return /^[0-9a-f]{7,40}$/.test(name) ? name : null;
+}
+
+function currentRoute(): Route {
+  if (state.mode === "review") {
+    const showing = review.showing();
+    return {
+      view: "review",
+      head: state.head ? refParam(state.head) : undefined,
+      base: state.base ? refParam(state.base) : undefined,
+      commit: showing === "all" ? undefined : showing,
+    };
+  }
+  if (state.mode === "files") {
+    return {
+      view: "files",
+      rev: state.rev ? refParam(state.rev) : undefined,
+      path: files.openPath() ?? undefined,
+    };
+  }
+  return { view: "graph", commit: state.selectedId ?? undefined };
+}
+
+/// Record where the app now is. Deliberate moves add to the history; ones the
+/// reader is holding a key down for replace the entry instead.
+function syncUrl(replace = false): void {
+  if (!backend.routable || applyingRoute) return;
+  const url = toUrl(currentRoute());
+  if (sameUrl(url)) return;
+  if (replace) history.replaceState(null, "", url);
+  else history.pushState(null, "", url);
+}
+
+async function applyRoute(route: Route): Promise<void> {
+  applyingRoute = true;
+  try {
+    if (route.view === "review") {
+      state.head = resolveRef(route.head) ?? state.head;
+      state.base = resolveRef(route.base) ?? state.base;
+      if (state.base === state.head) state.base = defaultBase(state.head);
+      renderBaseSelect();
+      persistReview();
+      pendingShowing = route.commit ?? null;
+      setMode("review", false);
+      await loadReview();
+    } else if (route.view === "files") {
+      state.rev = resolveRef(route.rev) ?? state.rev;
+      persistRev();
+      pendingFile = route.path ?? null;
+      setMode("files", false);
+      await loadFiles();
+    } else {
+      setMode("graph");
+      if (route.commit) await jumpToCommit(route.commit);
+    }
+  } finally {
+    applyingRoute = false;
+  }
+}
+
+/// `load` is false when the caller will run the view's load itself, as
+/// applying a route does so it can await it.
+function setMode(mode: Mode, load = true): void {
   state.mode = mode;
   store.setMode(mode);
   const graphing = mode === "graph";
@@ -490,7 +583,8 @@ function setMode(mode: Mode): void {
     a.hidden = !graphing;
   }
   renderSidebar();
-  if (!state.repoPath) return;
+  syncUrl();
+  if (!state.repoPath || !load) return;
   if (mode === "review") void loadReview();
   if (mode === "files") void loadFiles();
 }
@@ -578,9 +672,16 @@ function selectFile(i: number): void {
   detailPane.select(state.selectedFile, true);
 }
 
-async function selectCommit(id: string, scrollTo = false): Promise<void> {
+/// `replaceUrl` is for arrow-key walking, which would otherwise fill the
+/// history with a step per commit.
+async function selectCommit(
+  id: string,
+  scrollTo = false,
+  replaceUrl = false,
+): Promise<void> {
   setFocus("commits");
   state.selectedId = id;
+  syncUrl(replaceUrl);
   for (const row of el.rows.children) {
     row.classList.toggle("selected", (row as HTMLElement).dataset.id === id);
   }
@@ -709,8 +810,17 @@ async function openRepo(path: string): Promise<void> {
   renderSidebar();
   renderDetails();
   await refreshGraph();
-  if (state.mode === "review") await loadReview();
-  if (state.mode === "files") await loadFiles();
+  // A position from the address bar needs the refs, so it waits until here.
+  if (startRoute) {
+    const route = startRoute;
+    startRoute = null;
+    await applyRoute(route);
+  } else if (state.mode === "review") {
+    await loadReview();
+  } else if (state.mode === "files") {
+    await loadFiles();
+  }
+  syncUrl(true);
 }
 
 /// Re-read refs and commits from disk, keeping the current branch selection
@@ -782,7 +892,16 @@ function wire(): void {
   el.baseRef.addEventListener("change", () => {
     state.base = el.baseRef.value;
     persistReview();
+    syncUrl();
     void loadReview();
+  });
+
+  review.onNavigate(() => syncUrl());
+  files.onNavigate(() => syncUrl());
+
+  window.addEventListener("popstate", () => {
+    const route = fromUrl(new URL(location.href));
+    if (route) void applyRoute(route);
   });
 
   // Branch selection (delegated): checkboxes in graph mode, radios in review.
@@ -796,12 +915,14 @@ function wire(): void {
         if (state.base === ref) state.base = defaultBase(ref);
         renderBaseSelect();
         persistReview();
+        syncUrl();
         void loadReview();
         return;
       }
       if (state.mode === "files") {
         state.rev = ref;
         persistRev();
+        syncUrl();
         void loadFiles();
         return;
       }
@@ -908,7 +1029,7 @@ function wire(): void {
     const cur = g.rows.findIndex((r) => r.id === state.selectedId);
     const next =
       cur === -1 ? 0 : Math.min(g.rows.length - 1, Math.max(0, cur + delta));
-    if (next !== cur) void selectCommit(g.rows[next].id, true);
+    if (next !== cur) void selectCommit(g.rows[next].id, true, true);
     ev.preventDefault();
   });
 
@@ -966,7 +1087,9 @@ async function init(): Promise<void> {
   el.branchSort.value = store.branchSort();
   el.details.style.height = `${store.detailsHeight()}px`;
   setDetailsVisible(store.detailsVisible());
-  setMode(store.mode());
+  // A URL wins over the stored mode: it is where the reader asked to be.
+  startRoute = backend.routable ? fromUrl(new URL(location.href)) : null;
+  setMode(startRoute?.view ?? store.mode(), false);
   renderDetails();
   // The server picks the repository for the web build, which ignores the path;
   // the desktop build reopens whatever was open last.

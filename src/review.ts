@@ -310,7 +310,25 @@ async function showCommit(id: string): Promise<void> {
   render();
 }
 
-export async function load(repo: string, base: string, head: string): Promise<void> {
+/// Which commit's diff is on screen, or ALL for the whole branch.
+export function showing(): string {
+  return rs.showing;
+}
+
+/// Fires when the reader moves to another commit, so the position can be
+/// recorded. Loading a comparison does not count as moving.
+export function onNavigate(cb: () => void): void {
+  navigated = cb;
+}
+
+let navigated: () => void = () => {};
+
+export async function load(
+  repo: string,
+  base: string,
+  head: string,
+  showing?: string,
+): Promise<void> {
   rs.repo = repo;
   rs.base = base;
   rs.head = head;
@@ -323,7 +341,10 @@ export async function load(repo: string, base: string, head: string): Promise<vo
     render();
     return;
   }
-  await showCommit(ALL);
+  // A commit asked for by the URL, if this comparison still contains it.
+  const wanted =
+    showing && rs.result.commits.some((c) => c.id === showing) ? showing : ALL;
+  await showCommit(wanted);
 }
 
 export function clear(why: string): void {
@@ -364,7 +385,7 @@ function select(i: number): void {
 function step(delta: number): void {
   const i = el.commitSelect.selectedIndex + delta;
   if (i < 0 || i >= el.commitSelect.options.length) return;
-  void showCommit(el.commitSelect.options[i].value);
+  void showCommit(el.commitSelect.options[i].value).then(navigated);
 }
 
 /// The files view opens what the diff is showing: one commit's own version of
@@ -384,7 +405,9 @@ export function wire(): void {
     renderMessage();
   });
 
-  el.commitSelect.addEventListener("change", () => void showCommit(el.commitSelect.value));
+  el.commitSelect.addEventListener("change", () =>
+    void showCommit(el.commitSelect.value).then(navigated),
+  );
   el.prev.addEventListener("click", () => step(-1));
   el.next.addEventListener("click", () => step(1));
 

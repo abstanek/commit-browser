@@ -246,12 +246,25 @@ export function setVisible(visible: boolean): void {
   el.root.hidden = !visible;
 }
 
+/// The file on screen, for recording the position.
+export function openPath(): string | null {
+  return fs.selected;
+}
+
+/// Fires when the reader opens a different file, which loading does not count
+/// as: that position was already recorded by whoever asked for the load.
+export function onNavigate(cb: () => void): void {
+  navigated = cb;
+}
+
+let navigated: () => void = () => {};
+
 export function wire(): void {
   el.tree.addEventListener("click", (ev) => {
     const target = ev.target as HTMLElement;
     const file = target.closest<HTMLElement>(".tree-file");
     if (file?.dataset.file) {
-      void openFile(file.dataset.file);
+      void openFile(file.dataset.file).then(navigated);
       return;
     }
     const dir = target.closest<HTMLElement>(".tree-dir");
