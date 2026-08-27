@@ -2,6 +2,10 @@
 //! app over HTTP, backed by one repository named on the command line. Intended
 //! to run on a dev machine and be reached through an SSH tunnel, so it binds
 //! loopback by default and exposes no way to open a different repository.
+//!
+//! The frontend is compiled into the binary, so a release build is one file
+//! that needs nothing beside it. `--static-dir` serves from disk instead, which
+//! is what the frontend's own dev loop wants.
 
 use std::net::IpAddr;
 use std::path::PathBuf;
@@ -10,14 +14,17 @@ use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
-use axum::http::{StatusCode, header};
+use axum::http::{StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use clap::Parser;
+use include_dir::{Dir, include_dir};
 use serde::Serialize;
 use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
+
+static ASSETS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../dist-web");
 
 const DEFAULT_LIMIT: usize = 1000;
 
@@ -37,8 +44,8 @@ struct Args {
     #[arg(long, short, default_value_t = 4600)]
     port: u16,
 
-    /// Directory holding the built frontend. Defaults to the dist-web/ produced
-    /// by `npm run build:web` in the source tree this binary was built from.
+    /// Serve the frontend from this directory instead of the copy compiled
+    /// into the binary.
     #[arg(long)]
     static_dir: Option<PathBuf>,
 }
@@ -146,9 +153,19 @@ async fn file(
 fn disposition(name: &str) -> String {
     let ascii: String = name
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || "._-".contains(c) { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || "._-".contains(c) {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
-    let ascii = if ascii.is_empty() { "download".to_string() } else { ascii };
+    let ascii = if ascii.is_empty() {
+        "download".to_string()
+    } else {
+        ascii
+    };
     let mut encoded = String::new();
     for b in name.as_bytes() {
         match b {
@@ -190,6 +207,32 @@ async fn commit(
     blocking(move || gitcore::commit_details(&dir, &id)).await
 }
 
+/// Looks a path up in the compiled-in frontend, tolerating the leading slash a
+/// request path carries.
+fn asset(path: &str) -> Option<&'static include_dir::File<'static>> {
+    ASSETS.get_file(path.trim_start_matches('/'))
+}
+
+/// The frontend, served out of the binary. Anything the bundle does not have is
+/// answered with index.html, so a reload of an in-app URL lands on the app
+/// rather than a 404, matching what ServeDir does under --static-dir.
+async fn embedded(uri: Uri) -> Response {
+    let (file, mime) = match asset(uri.path()) {
+        Some(file) => (
+            file,
+            mime_guess::from_path(uri.path()).first_or_octet_stream(),
+        ),
+        None => match asset("index.html") {
+            Some(index) => (index, mime_guess::mime::TEXT_HTML_UTF_8),
+            None => {
+                let msg = "no frontend was built into this binary";
+                return (StatusCode::NOT_FOUND, msg).into_response();
+            }
+        },
+    };
+    ([(header::CONTENT_TYPE, mime.as_ref())], file.contents()).into_response()
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     let args = Args::parse();
@@ -202,20 +245,6 @@ async fn main() -> ExitCode {
         }
     };
 
-    let static_dir = args
-        .static_dir
-        .unwrap_or_else(|| PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../dist-web")));
-    // Not fatal: `npm run dev:web` proxies to this server for the API alone.
-    if !static_dir.join("index.html").exists() {
-        eprintln!(
-            "warning: no frontend at {} - run `npm run build:web`, or pass --static-dir",
-            static_dir.display()
-        );
-    }
-
-    // Unknown paths fall back to index.html so the page survives a reload.
-    let files = ServeDir::new(&static_dir).fallback(ServeFile::new(static_dir.join("index.html")));
-
     let app = Router::new()
         .route("/api/repo", get(repo))
         .route("/api/refs", get(refs))
@@ -224,9 +253,34 @@ async fn main() -> ExitCode {
         .route("/api/tree", get(tree))
         .route("/api/file", get(file))
         .route("/api/raw", get(raw))
-        .route("/api/commits/{id}", get(commit))
-        .fallback_service(files)
-        .with_state(Arc::new(AppState { git_dir: info.git_dir }));
+        .route("/api/commits/{id}", get(commit));
+
+    let app = match &args.static_dir {
+        Some(dir) => {
+            if !dir.join("index.html").exists() {
+                eprintln!("warning: no index.html under {}", dir.display());
+            }
+            // Unknown paths fall back to index.html so the page survives a reload.
+            app.fallback_service(
+                ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html"))),
+            )
+        }
+        None => {
+            // Not fatal: `npm run dev:web` proxies to this server for the API alone,
+            // and serves the frontend itself.
+            if asset("index.html").is_none() {
+                eprintln!(
+                    "warning: no frontend was compiled into this binary - run \
+                     `npm run build:web` and rebuild, or pass --static-dir"
+                );
+            }
+            app.fallback(embedded)
+        }
+    };
+
+    let app = app.with_state(Arc::new(AppState {
+        git_dir: info.git_dir,
+    }));
 
     let listener = match tokio::net::TcpListener::bind((args.host, args.port)).await {
         Ok(l) => l,
@@ -235,7 +289,10 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    println!("commit-browser: {} at http://{}:{}", info.display_path, args.host, args.port);
+    println!(
+        "commit-browser: {} at http://{}:{}",
+        info.display_path, args.host, args.port
+    );
 
     if let Err(e) = axum::serve(listener, app)
         .with_graceful_shutdown(async {

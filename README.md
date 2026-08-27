@@ -46,6 +46,9 @@ cargo build --release -p commit-browser-server
 
 Then open <http://127.0.0.1:4600>.
 
+`build:web` has to run first: the frontend is compiled into the binary, so the
+result is a single file that can be copied to another machine on its own.
+
 The URL follows where you are, so back and forward work and a position can be
 shared or bookmarked: `/graph?commit=<sha>`, `/review?head=<branch>&base=<branch>`
 (with `&commit=<sha>` for one commit of the branch), and
@@ -62,8 +65,8 @@ There is no authentication and no way to open a different repository over HTTP;
 `--host 0.0.0.0` gives anyone who can reach the port read access to the
 repository, including its full history and diffs.
 
-Options: `--repo`, `--host`, `--port`, `--static-dir` (defaults to the
-`dist-web/` of the source tree the binary was built from).
+Options: `--repo`, `--host`, `--port`, and `--static-dir` to serve the frontend
+from a directory instead of the copy compiled into the binary.
 
 ### Developing the web variant
 
