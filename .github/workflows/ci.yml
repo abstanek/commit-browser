@@ -50,6 +50,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
+      # Formatting is the same answer on every platform, so ask once.
+      - name: Check formatting
+        if: runner.os == 'Linux'
+        run: cargo fmt --all --check
+
       - run: npm ci
 
       # Both bundles, which also type-checks: each build script runs tsc first.
