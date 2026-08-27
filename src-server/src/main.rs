@@ -279,34 +279,31 @@ async fn embedded(uri: Uri) -> Response {
     ([(header::CONTENT_TYPE, mime.as_ref())], file.contents()).into_response()
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-    let args = Args::parse();
-
-    // No --repo at all means the working directory, as it always has.
-    let wanted = if args.repo.is_empty() {
+/// Open every repository named on the command line, in the order given. No
+/// name at all means the working directory, as it always has.
+fn open_all(paths: &[String]) -> Result<Vec<gitcore::RepoInfo>, String> {
+    let wanted: Vec<String> = if paths.is_empty() {
         vec![".".to_string()]
     } else {
-        args.repo.clone()
+        paths.to_vec()
     };
     let mut opened: Vec<gitcore::RepoInfo> = Vec::new();
     for path in &wanted {
-        match gitcore::open_repo(path) {
-            // Two --repo arguments can name one repository from different
-            // directories inside it; keep the first and say nothing.
-            Ok(info) => {
-                if !opened.iter().any(|r| r.git_dir == info.git_dir) {
-                    opened.push(info);
-                }
-            }
-            Err(e) => {
-                eprintln!("cannot open repository at {path}: {e}");
-                return ExitCode::FAILURE;
-            }
+        let info = gitcore::open_repo(path)
+            .map_err(|e| format!("cannot open repository at {path}: {e}"))?;
+        // Two arguments can name one repository from different directories
+        // inside it; keep the first and say nothing.
+        if !opened.iter().any(|r| r.git_dir == info.git_dir) {
+            opened.push(info);
         }
     }
+    Ok(opened)
+}
 
-    let app = Router::new()
+/// The API alone, waiting for its state. The frontend is attached separately,
+/// which leaves this the whole of what the tests need.
+fn api_router() -> Router<Arc<AppState>> {
+    Router::new()
         .route("/api/repos", get(repos))
         .route("/api/refs", get(refs))
         .route("/api/graph", get(graph))
@@ -315,7 +312,22 @@ async fn main() -> ExitCode {
         .route("/api/file", get(file))
         .route("/api/image", get(image))
         .route("/api/raw", get(raw))
-        .route("/api/commits/{id}", get(commit));
+        .route("/api/commits/{id}", get(commit))
+}
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    let args = Args::parse();
+
+    let opened = match open_all(&args.repo) {
+        Ok(opened) => opened,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let app = api_router();
 
     let app = match &args.static_dir {
         Some(dir) => {
