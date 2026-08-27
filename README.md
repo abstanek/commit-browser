@@ -44,6 +44,11 @@ cargo build --release -p commit-browser-server
 
 Then open <http://127.0.0.1:4600>.
 
+The URL follows where you are, so back and forward work and a position can be
+shared or bookmarked: `/graph?commit=<sha>`, `/review?head=<branch>&base=<branch>`
+(with `&commit=<sha>` for one commit of the branch), and
+`/files?rev=<branch-or-sha>&path=<file>`.
+
 The server binds loopback, so from a workstation reach a remote dev machine
 through an SSH tunnel:
 
