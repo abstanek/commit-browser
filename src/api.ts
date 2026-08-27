@@ -57,6 +57,10 @@ export interface FileDiff {
   additions: number;
   deletions: number;
   binary: boolean;
+  /// Size after the change, or before it for a deletion.
+  size: number;
+  /// True when the file is an image the host can hand over for display.
+  image: boolean;
   patch: string;
   truncated: boolean;
 }
@@ -116,7 +120,20 @@ export interface FileContent {
   size: number;
   binary: boolean;
   truncated: boolean;
+  /// True when the file is an image the host can hand over for display.
+  image: boolean;
   text: string;
+}
+
+/// An image's bytes, base64 encoded: the desktop build has no URL to point an
+/// <img> at, so both hosts hand the page the data itself.
+export interface ImageContent {
+  path: string;
+  commit: string;
+  short_commit: string;
+  mime: string;
+  size: number;
+  base64: string;
 }
 
 /// The repository access the UI needs from its host. The desktop build talks to
@@ -136,6 +153,7 @@ export interface Backend {
   /// One directory of the tree at `rev`; empty `path` is the root.
   listTree(repo: string, rev: string, path: string): Promise<TreeResult>;
   readFile(repo: string, rev: string, path: string): Promise<FileContent>;
+  readImage(repo: string, rev: string, path: string): Promise<ImageContent>;
   /// Link that downloads the file, or null on hosts without one.
   rawUrl(repo: string, rev: string, path: string): string | null;
   /// True when the host has a real URL, so the app's position can live in the

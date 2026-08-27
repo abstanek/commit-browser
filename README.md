@@ -12,10 +12,15 @@ Three views, switched from the toolbar:
   drag down the lines to fold just that group; folds are remembered per
   comparison
 - **Files** - the repository as it stands at one revision, with
-  syntax-highlighted sources. The revision is a branch picked in the sidebar, or
+  syntax-highlighted sources and images shown as pictures. The revision is a branch picked in the sidebar, or
   the commit a diff was read from: each file name in a diff links through to
   itself here. In the web variant each file also has a download link; the
   desktop build has no equivalent and leaves the button out
+
+Images appear in place, both in a diff and in the files view. Anything over
+100 KB waits behind a button instead: the bytes travel base64 encoded, since the
+desktop build has no URL to point at, and that is a slow thing to spend on a
+picture nobody asked to see.
 
 Several repositories can be to hand, one browsed at a time. The selector at the
 top left lists them by name over path, since a name alone does not tell two

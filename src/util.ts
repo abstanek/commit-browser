@@ -33,3 +33,11 @@ export const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
 export function shortRef(full: string): string {
   return full.replace(/^refs\/(heads|remotes|tags)\//, "");
 }
+
+/// Byte counts as a reader wants them: whole units, no more precision than the
+/// number deserves.
+export function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} K`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} M`;
+}

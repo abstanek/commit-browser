@@ -1385,3 +1385,30 @@ body {
   max-width: 420px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
+
+/* Images shown in place, in a diff or in the files view. */
+.image-view {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+}
+
+.image-inline {
+  max-width: 100%;
+  /* Never taller than the pane: a portrait image should not push everything
+     below it off the screen. */
+  max-height: 70vh;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  /* Show transparency for what it is rather than against the page. */
+  background:
+    repeating-conic-gradient(var(--bg-alt) 0% 25%, var(--bg) 0% 50%) 50% / 16px 16px;
+}
+
+.image-note {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}

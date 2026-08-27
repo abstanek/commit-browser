@@ -1,5 +1,6 @@
 import type { FileDiff } from "./api";
 import { coversRange, rangeAt, type Range } from "./collapse";
+import { imageHtml } from "./imageview";
 import { escapeHtml } from "./util";
 
 export const STATUS_LETTER: Record<string, string> = {
@@ -50,8 +51,21 @@ export function hunkBodies(lines: string[]): Map<number, Range> {
 /// A unified patch as coloured lines. Lines inside a folded range collapse to a
 /// single placeholder, and hunk headers carry the extent of their body so they
 /// can be folded whole.
-export function patchHtml(f: FileDiff, folds: Range[] = []): string {
-  if (f.binary) return `<div class="detail-empty">Binary file.</div>`;
+///
+/// A binary file has no patch to draw. An image is shown instead, as it stands
+/// at the revision being read: `at` says where to read it from.
+export function patchHtml(
+  f: FileDiff,
+  folds: Range[] = [],
+  at?: { repo: string; rev: string },
+): string {
+  if (f.binary) {
+    // A deleted file is not at this revision to be read.
+    if (f.image && at && f.status !== "deleted") {
+      return imageHtml(at.repo, at.rev, f.path, f.size);
+    }
+    return `<div class="detail-empty">Binary file.</div>`;
+  }
   const lines = f.patch.split("\n");
   const bodies = hunkBodies(lines);
   const out: string[] = [];

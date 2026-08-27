@@ -1,7 +1,8 @@
 import { backend } from "@backend";
 import type { FileContent, TreeEntry } from "./api";
 import { sourceHtml } from "./source";
-import { $, escapeHtml, toast } from "./util";
+import { hydrate, imageHtml } from "./imageview";
+import { $, escapeHtml, formatSize, toast } from "./util";
 
 /// File browser: the repository as it stands at one revision, with a lazily
 /// expanded directory tree on the left and the selected file on the right.
@@ -90,12 +91,6 @@ function renderTree(): void {
     : `<div class="detail-empty">Pick a branch to browse.</div>`;
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} K`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} M`;
-}
-
 async function loadDir(path: string, quiet = false): Promise<void> {
   if (!fs.repo || !fs.rev || fs.listings.has(path)) return;
   try {
@@ -154,6 +149,11 @@ function renderContent(): void {
   if (!c) {
     const why = fs.missing ?? "Select a file.";
     el.view.innerHTML = `<div class="detail-empty">${escapeHtml(why)}</div>`;
+    return;
+  }
+  if (c.image && fs.repo && fs.rev) {
+    el.view.innerHTML = imageHtml(fs.repo, fs.rev, c.path, c.size);
+    hydrate(el.view);
     return;
   }
   if (c.binary) {

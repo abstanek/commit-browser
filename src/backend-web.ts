@@ -3,6 +3,7 @@ import type {
   CommitDetails,
   FileContent,
   GraphResult,
+  ImageContent,
   RefsResult,
   RepoInfo,
   ReviewResult,
@@ -44,6 +45,8 @@ export const backend: Backend = {
     get<TreeResult>(`tree?${new URLSearchParams({ repo, rev, path })}`),
   readFile: (repo, rev, path) =>
     get<FileContent>(`file?${new URLSearchParams({ repo, rev, path })}`),
+  readImage: (repo, rev, path) =>
+    get<ImageContent>(`image?${new URLSearchParams({ repo, rev, path })}`),
   rawUrl: (repo, rev, path) => `/api/raw?${new URLSearchParams({ repo, rev, path })}`,
   routable: true,
   // The server is pointed at its repositories on the command line; the reader

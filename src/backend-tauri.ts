@@ -5,6 +5,7 @@ import type {
   CommitDetails,
   FileContent,
   GraphResult,
+  ImageContent,
   RefsResult,
   RepoInfo,
   ReviewResult,
@@ -52,6 +53,7 @@ export const backend: Backend = {
   getReview: (repo, base, head) => invoke<ReviewResult>("get_review", { repo, base, head }),
   listTree: (repo, rev, path) => invoke<TreeResult>("list_tree", { repo, rev, path }),
   readFile: (repo, rev, path) => invoke<FileContent>("read_file", { repo, rev, path }),
+  readImage: (repo, rev, path) => invoke<ImageContent>("read_image", { repo, rev, path }),
   // Downloading is an HTTP idea; the desktop build hides the link.
   rawUrl: () => null,
   // The window has no address bar, and the webview's URL is not a place.

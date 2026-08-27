@@ -770,7 +770,11 @@ function renderDetails(): void {
       );
     })
     .join("");
-  detailPane.show(d.files, "No changes vs first parent.", `${state.repoPath}|${d.id}`);
+  detailPane.show(d.files, "No changes vs first parent.", {
+    scope: `${state.repoPath}|${d.id}`,
+    repo: state.repoPath ?? "",
+    rev: d.id,
+  });
 }
 
 function setDetailsVisible(visible: boolean): void {

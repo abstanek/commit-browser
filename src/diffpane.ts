@@ -8,6 +8,7 @@ import {
   saveFolds,
 } from "./collapse";
 import { fileLabel, patchHtml, statsHtml, STATUS_LETTER } from "./diff";
+import { hydrate } from "./imageview";
 import { escapeHtml } from "./util";
 
 /// A scrolling stack of file diffs: reading past the end of one file runs
@@ -19,11 +20,18 @@ const BATCH = 10;
 /// How close to the bottom the reader gets before the next batch is added.
 const PREFETCH = 800;
 
+/// What is being diffed, and where to read a file that has no patch to draw.
+/// `scope` keys folded lines to this comparison rather than letting them leak
+/// between commits; `repo` and `rev` are where an image in the diff is read at.
+export interface DiffAt {
+  scope: string;
+  repo: string;
+  rev: string;
+}
+
 export interface DiffPane {
-  /// Replace the contents. `empty` is shown when there are no files, and
-  /// `scope` names what is being diffed, so folded lines are remembered
-  /// against that comparison rather than leaking between commits.
-  show(files: FileDiff[], empty: string, scope?: string): void;
+  /// Replace the contents. `empty` is shown when there are no files.
+  show(files: FileDiff[], empty: string, at?: DiffAt): void;
   /// Offer a link beside each file name that hands the path to `cb`.
   onOpenFile(cb: (path: string) => void): void;
   /// Make `index` current, optionally scrolling it to the top of the pane.
@@ -42,6 +50,7 @@ export function createDiffPane(root: HTMLElement): DiffPane {
   let selfScroll = false;
   let pending = false;
   let scope = "";
+  let at: DiffAt | null = null;
   let openFile: ((path: string) => void) | null = null;
   /// Folded line ranges per file index, and the line range being selected.
   let folds: Range[][] = [];
@@ -84,7 +93,7 @@ export function createDiffPane(root: HTMLElement): DiffPane {
       `<span class="status ${f.status}">${STATUS_LETTER[f.status] ?? "?"}</span>` +
       `<span class="diff-path">${fileLabel(f)}</span>${open}${statsHtml(f)}` +
       `<span class="diff-actions">${actionsHtml(index)}</span></div>` +
-      patchHtml(f, hidden) +
+      patchHtml(f, hidden, at ?? undefined) +
       `</section>`
     );
   }
@@ -95,6 +104,7 @@ export function createDiffPane(root: HTMLElement): DiffPane {
     if (!block) return;
     block.outerHTML = blockHtml(files[index], index);
     markSelection();
+    hydrate(root);
   }
 
   function setFolds(index: number, next: Range[]): void {
@@ -144,6 +154,7 @@ export function createDiffPane(root: HTMLElement): DiffPane {
         .join(""),
     );
     rendered = want;
+    hydrate(root);
   }
 
   function blockAt(index: number): HTMLElement | null {
@@ -272,9 +283,10 @@ export function createDiffPane(root: HTMLElement): DiffPane {
   });
 
   return {
-    show(next, empty, nextScope = "") {
+    show(next, empty, nextAt) {
       files = next;
-      scope = nextScope;
+      at = nextAt ?? null;
+      scope = nextAt?.scope ?? "";
       picked = null;
       folds = files.map((f) =>
         scope ? loadFolds(scope, f.path, f.patch.split("\n").length) : [],

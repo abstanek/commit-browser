@@ -6,6 +6,8 @@ mod layout;
 use std::collections::HashMap;
 use std::path::Path;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use git2::{Diff, DiffOptions, Oid, Repository, Sort};
 use serde::Serialize;
 
@@ -20,6 +22,10 @@ fn err(e: git2::Error) -> String {
 const MAX_PATCH_BYTES: usize = 1_000_000;
 const MAX_REVIEW_COMMITS: usize = 2000;
 const MAX_FILE_BYTES: usize = 2_000_000;
+/// Ceiling on an image served for display. Well above anything a reader would
+/// wait for inline, and there only so a huge blob cannot be turned into base64
+/// in memory on request.
+const MAX_IMAGE_BYTES: u64 = 25_000_000;
 
 #[derive(Serialize, Debug, Clone)]
 pub struct RepoInfo {
@@ -87,6 +93,10 @@ pub struct FileDiff {
     pub additions: usize,
     pub deletions: usize,
     pub binary: bool,
+    /// Size of the file after the change, or before it for a deletion.
+    pub size: u64,
+    /// True when the file is an image this crate can hand over for display.
+    pub image: bool,
     pub patch: String,
     pub truncated: bool,
 }
@@ -151,6 +161,19 @@ pub struct TreeResult {
     pub entries: Vec<TreeEntry>,
 }
 
+/// An image's bytes, base64 encoded so both hosts can hand it to the page the
+/// same way: the desktop build has no URL to point an <img> at.
+#[derive(Serialize, Debug)]
+pub struct ImageContent {
+    pub path: String,
+    pub commit: String,
+    pub short_commit: String,
+    pub mime: String,
+    pub size: u64,
+    /// Standard base64, ready to drop into a data: URL.
+    pub base64: String,
+}
+
 #[derive(Serialize, Debug)]
 pub struct FileContent {
     pub path: String,
@@ -160,6 +183,8 @@ pub struct FileContent {
     pub binary: bool,
     /// True when `text` holds only the first MAX_FILE_BYTES of the file.
     pub truncated: bool,
+    /// True when the file is an image this crate can hand over for display.
+    pub image: bool,
     pub text: String,
 }
 
@@ -425,6 +450,17 @@ fn diff_files(
                 additions: 0,
                 deletions: 0,
                 binary: true,
+                size: delta.new_file().size().max(delta.old_file().size()),
+                image: image_mime(
+                    delta
+                        .new_file()
+                        .path()
+                        .or_else(|| delta.old_file().path())
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                        .as_str(),
+                )
+                .is_some(),
                 patch: String::new(),
                 truncated: false,
             });
@@ -447,6 +483,9 @@ fn diff_files(
             Some(op) if *op != new_path => Some(op.clone()),
             _ => None,
         };
+        // A deletion has nothing on the new side, so fall back to the old one.
+        let size = delta.new_file().size().max(delta.old_file().size());
+        let image = image_mime(&new_path).is_some();
         let (_, additions, deletions) = patch.line_stats().unwrap_or((0, 0, 0));
         let (text, truncated) = if binary {
             (String::new(), false)
@@ -474,6 +513,8 @@ fn diff_files(
             additions,
             deletions,
             binary,
+            size,
+            image,
             patch: text,
             truncated,
         });
@@ -668,7 +709,47 @@ pub fn read_file(repo_path: &str, rev: &str, path: &str) -> Result<FileContent> 
         size,
         binary,
         truncated,
+        image: image_mime(path).is_some(),
         text,
+    })
+}
+
+/// The image types worth showing in the page. Deliberately only the raster
+/// formats a browser draws from a data: URL: SVG is text and reads better as
+/// its source, which is what the files view already shows.
+fn image_mime(path: &str) -> Option<&'static str> {
+    let ext = Path::new(path).extension()?.to_str()?.to_ascii_lowercase();
+    Some(match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "avif" => "image/avif",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        _ => return None,
+    })
+}
+
+/// An image at `rev`, encoded for display. Errors rather than encoding
+/// something the reader could not sensibly be shown anyway.
+pub fn read_image(repo_path: &str, rev: &str, path: &str) -> Result<ImageContent> {
+    let mime = image_mime(path).ok_or_else(|| format!("{path} is not an image"))?;
+    let repo = Repository::open(repo_path).map_err(err)?;
+    let commit = resolve_commit(&repo, rev)?;
+    let blob = blob_at(&repo, &commit, path)?;
+    let size = blob.size() as u64;
+    if size > MAX_IMAGE_BYTES {
+        return Err(format!("{path} is too large to display ({size} bytes)"));
+    }
+    let id = commit.id().to_string();
+    Ok(ImageContent {
+        path: path.to_string(),
+        short_commit: id[..7].to_string(),
+        commit: id,
+        mime: mime.to_string(),
+        size,
+        base64: BASE64.encode(blob.content()),
     })
 }
 

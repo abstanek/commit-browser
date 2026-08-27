@@ -285,7 +285,13 @@ function render(): void {
   renderMessage();
   renderTree();
   // Folds belong to one comparison and one commit within it.
-  pane.show(rs.files, emptyReason(), `${rs.repo}|${rs.base}..${rs.head}|${rs.showing}`);
+  pane.show(rs.files, emptyReason(), {
+    scope: `${rs.repo}|${rs.base}..${rs.head}|${rs.showing}`,
+    repo: rs.repo,
+    // The same revision the file links open at: one commit's own version,
+    // or the branch tip when the whole branch is in view.
+    rev: (rs.showing === ALL ? rs.head : rs.showing) ?? "",
+  });
 }
 
 // --------------------------------------------------------------------- state

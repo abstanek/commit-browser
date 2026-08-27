@@ -47,6 +47,11 @@ fn read_file(repo: String, rev: String, path: String) -> Result<gitcore::FileCon
     gitcore::read_file(&git_dir(&repo)?, &rev, &path)
 }
 
+#[tauri::command]
+fn read_image(repo: String, rev: String, path: String) -> Result<gitcore::ImageContent, String> {
+    gitcore::read_image(&git_dir(&repo)?, &rev, &path)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -57,7 +62,8 @@ pub fn run() {
             get_commit_details,
             get_review,
             list_tree,
-            read_file
+            read_file,
+            read_image
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

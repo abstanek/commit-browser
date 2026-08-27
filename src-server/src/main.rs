@@ -185,6 +185,14 @@ async fn file(
     blocking(move || gitcore::read_file(&dir, &p.rev, &p.path)).await
 }
 
+async fn image(
+    State(s): State<Arc<AppState>>,
+    Query(p): Query<PathParams>,
+) -> Result<Json<gitcore::ImageContent>, ApiError> {
+    let dir = s.git_dir(p.repo.as_deref())?;
+    blocking(move || gitcore::read_image(&dir, &p.rev, &p.path)).await
+}
+
 /// RFC 6266 attachment header: an ASCII fallback plus the exact name. Both are
 /// escaped, so a file name from the repository cannot inject header syntax.
 fn disposition(name: &str) -> String {
@@ -305,6 +313,7 @@ async fn main() -> ExitCode {
         .route("/api/review", get(review))
         .route("/api/tree", get(tree))
         .route("/api/file", get(file))
+        .route("/api/image", get(image))
         .route("/api/raw", get(raw))
         .route("/api/commits/{id}", get(commit));
 
