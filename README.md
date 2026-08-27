@@ -48,6 +48,21 @@ reading (`gitcore/`):
 
 The two differ only in `src/backend-{tauri,web}.ts`, selected by Vite's `--mode`.
 
+## Downloads
+
+Every release carries prebuilt artifacts for Linux, macOS and Windows, two per
+platform: the desktop app and the web server.
+
+The web server is a single file with the frontend compiled into it, so there is
+nothing to install beside it; the Linux build is statically linked and runs on
+any distribution. The desktop app borrows the webview the operating system
+already has - WebView2 on Windows, WKWebView on macOS - and ships as an AppImage
+on Linux, which carries the GTK and webkit libraries it needs.
+
+The macOS builds are universal, running on Apple silicon and Intel alike.
+Nothing is code-signed, so macOS and Windows will both ask before running a
+download.
+
 ## Desktop app
 
 ```
