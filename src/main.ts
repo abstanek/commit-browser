@@ -928,7 +928,10 @@ function wire(): void {
   });
 
   // Details pane toggle + splitter.
-  el.toggleDetails.addEventListener("click", () => setDetailsVisible(el.details.hidden));
+  // hidden reads as boolean | string, since it can also be "until-found".
+  el.toggleDetails.addEventListener("click", () =>
+    setDetailsVisible(Boolean(el.details.hidden)),
+  );
   el.splitter.addEventListener("mousedown", (down) => {
     down.preventDefault();
     const startY = down.clientY;
