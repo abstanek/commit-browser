@@ -17,12 +17,18 @@ Three views, switched from the toolbar:
   itself here. In the web variant each file also has a download link; the
   desktop build has no equivalent and leaves the button out
 
+Several repositories can be to hand, one browsed at a time. The selector at the
+top left lists them by name over path, since a name alone does not tell two
+checkouts apart; picking one is a move like any other, so back and forward walk
+between repositories as well as within them.
+
 It comes in two variants that share the frontend (`src/`) and all repository
 reading (`gitcore/`):
 
-- a desktop app (`src-tauri/`), which can open any repository via a file dialog
-- a web server (`src-server/`), which serves the same UI over HTTP for one
-  repository chosen on the command line
+- a desktop app (`src-tauri/`), which keeps the reader's own list of
+  repositories, added through a file dialog
+- a web server (`src-server/`), which serves the same UI over HTTP for the
+  repositories named on its command line
 
 The two differ only in `src/backend-{tauri,web}.ts`, selected by Vite's `--mode`.
 
@@ -32,6 +38,10 @@ The two differ only in `src/backend-{tauri,web}.ts`, selected by Vite's `--mode`
 npm install
 npm run tauri dev      # or: npm run tauri build
 ```
+
+Add repositories from the bottom of the repository selector. The list is the
+reader's own and is remembered between runs; removing one takes it out of the
+list and leaves it alone on disk.
 
 ## Web server
 
@@ -44,15 +54,26 @@ cargo build --release -p commit-browser-server
 ./target/release/commit-browser-server --repo /path/to/repo
 ```
 
+Repeat `--repo` to serve several at once:
+
+```
+./target/release/commit-browser-server --repo ~/src/one --repo ~/src/two
+```
+
+The list is fixed by that command line: the page offers no way to add to it,
+which is what keeps the server to the repositories it was pointed at.
+
 Then open <http://127.0.0.1:4600>.
 
 `build:web` has to run first: the frontend is compiled into the binary, so the
 result is a single file that can be copied to another machine on its own.
 
 The URL follows where you are, so back and forward work and a position can be
-shared or bookmarked: `/graph?commit=<sha>`, `/review?head=<branch>&base=<branch>`
-(with `&commit=<sha>` for one commit of the branch), and
-`/files?rev=<branch-or-sha>&path=<file>`.
+shared or bookmarked. Each carries `repo=<path>`, the repository as the server
+lists it, and then what within it: `/graph?repo=<path>&commit=<sha>`,
+`/review?repo=<path>&head=<branch>&base=<branch>` (with `&commit=<sha>` for one
+commit of the branch), and `/files?repo=<path>&rev=<branch-or-sha>&path=<file>`.
+A URL with no `repo=` opens the first repository the server was given.
 
 The server binds loopback, so from a workstation reach a remote dev machine
 through an SSH tunnel:
@@ -61,12 +82,12 @@ through an SSH tunnel:
 ssh -L 4600:127.0.0.1:4600 devbox
 ```
 
-There is no authentication and no way to open a different repository over HTTP;
-`--host 0.0.0.0` gives anyone who can reach the port read access to the
-repository, including its full history and diffs.
+There is no authentication and no way to reach a repository the server was not
+given; `--host 0.0.0.0` gives anyone who can reach the port read access to
+every repository served, including their full history and diffs.
 
-Options: `--repo`, `--host`, `--port`, and `--static-dir` to serve the frontend
-from a directory instead of the copy compiled into the binary.
+Options: `--repo` (repeatable), `--host`, `--port`, and `--static-dir` to serve
+the frontend from a directory instead of the copy compiled into the binary.
 
 ### Developing the web variant
 
