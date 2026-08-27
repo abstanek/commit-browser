@@ -185,7 +185,7 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
     let mut remotes = Vec::new();
     let remote_names: Vec<String> = repo
         .remotes()
-        .map(|arr| arr.iter().flatten().map(str::to_string).collect())
+        .map(|arr| arr.iter().flatten().flatten().map(str::to_string).collect())
         .unwrap_or_default();
 
     for r in repo.references().map_err(err)? {
@@ -193,7 +193,7 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
             Ok(r) => r,
             Err(_) => continue,
         };
-        let Some(full) = r.name().map(str::to_string) else { continue };
+        let Ok(full) = r.name().map(str::to_string) else { continue };
         if full.ends_with("/HEAD") {
             continue; // e.g. refs/remotes/origin/HEAD
         }
@@ -231,7 +231,7 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
         .head()
         .ok()
         .filter(|h| h.is_branch())
-        .and_then(|h| h.shorthand().map(str::to_string));
+        .and_then(|h| h.shorthand().ok().map(str::to_string));
 
     Ok(RefsResult { locals, remotes, head_branch })
 }
@@ -240,7 +240,7 @@ fn ref_labels(repo: &Repository) -> HashMap<Oid, Vec<RefLabel>> {
     let mut map: HashMap<Oid, Vec<RefLabel>> = HashMap::new();
     let Ok(refs) = repo.references() else { return map };
     for r in refs.flatten() {
-        let Some(full) = r.name().map(str::to_string) else { continue };
+        let Ok(full) = r.name().map(str::to_string) else { continue };
         if full.ends_with("/HEAD") {
             continue;
         }
@@ -308,7 +308,7 @@ pub fn graph(repo_path: &str, branches: &[String], limit: usize) -> Result<Graph
             GraphRow {
                 id: c.id().to_string(),
                 short_id: c.id().to_string()[..7].to_string(),
-                summary: c.summary().unwrap_or("").to_string(),
+                summary: c.summary().ok().flatten().unwrap_or("").to_string(),
                 author: author.name().unwrap_or("").to_string(),
                 email: author.email().unwrap_or("").to_string(),
                 time: c.time().seconds(),
@@ -342,7 +342,7 @@ pub fn commit_details(repo_path: &str, id: &str) -> Result<CommitDetails> {
     Ok(CommitDetails {
         id: commit.id().to_string(),
         short_id: commit.id().to_string()[..7].to_string(),
-        summary: commit.summary().unwrap_or("").to_string(),
+        summary: commit.summary().ok().flatten().unwrap_or("").to_string(),
         message: commit.message().unwrap_or("").to_string(),
         author_name: author.name().unwrap_or("").to_string(),
         author_email: author.email().unwrap_or("").to_string(),
@@ -474,7 +474,7 @@ pub fn review(repo_path: &str, base: &str, head: &str) -> Result<ReviewResult> {
         commits.push(ReviewCommit {
             id: oid.to_string(),
             short_id: oid.to_string()[..7].to_string(),
-            summary: c.summary().unwrap_or("").to_string(),
+            summary: c.summary().ok().flatten().unwrap_or("").to_string(),
             author: c.author().name().unwrap_or("").to_string(),
             time: c.time().seconds(),
         });
