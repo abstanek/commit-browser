@@ -26,6 +26,9 @@ use tower_http::services::{ServeDir, ServeFile};
 
 static ASSETS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../dist-web");
 
+#[cfg(test)]
+mod tests;
+
 const DEFAULT_LIMIT: usize = 1000;
 
 #[derive(Parser)]

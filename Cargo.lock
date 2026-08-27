@@ -499,12 +499,16 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "clap",
+ "git2",
  "gitcore",
+ "http-body-util",
  "include_dir",
  "mime_guess",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
+ "tower",
  "tower-http 0.7.0",
 ]
 
