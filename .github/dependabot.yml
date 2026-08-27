@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # The workflows pin actions to commits, which is what keeps a moved tag from
+  # changing what runs - and also what stops those pins ever updating on their
+  # own. This is the other half of that: one grouped pull request a week that
+  # bumps the commits and rewrites the version comments beside them.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
