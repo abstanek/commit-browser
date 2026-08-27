@@ -98,3 +98,17 @@ server on port 4600:
 npm run server -- --repo /path/to/repo
 npm run dev:web        # http://localhost:1421
 ```
+
+## Icons
+
+`public/favicon.svg` is the source. The web variants serve it as their favicon,
+with `public/favicon.ico` behind it for browsers that want one, and the desktop
+icon set is generated from it:
+
+```
+npx tauri icon public/favicon.svg
+```
+
+That writes icons for every platform Tauri knows about; `src-tauri/icons/` keeps
+the desktop ones, which is all this project builds for. The `.ico` is not
+optional on Windows: the build fails without it.

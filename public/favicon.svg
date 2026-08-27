@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="tile" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2="924">
+      <stop offset="0" stop-color="#2E3866"/><stop offset="1" stop-color="#141A38"/>
+    </linearGradient>
+    <linearGradient id="gloss" gradientUnits="userSpaceOnUse" x1="0" y1="100" x2="0" y2="924">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.11"/><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="trunk" gradientUnits="userSpaceOnUse" x1="0" y1="196" x2="0" y2="964">
+      <stop offset="0" stop-color="#FFF6E3"/><stop offset="1" stop-color="#F8E2BC"/>
+    </linearGradient>
+    <linearGradient id="branch" gradientUnits="userSpaceOnUse" x1="0" y1="318" x2="0" y2="842">
+      <stop offset="0" stop-color="#FFA24E"/><stop offset="1" stop-color="#FF6A5B"/>
+    </linearGradient>
+    <linearGradient id="lf" gradientUnits="userSpaceOnUse" x1="0" y1="386" x2="0" y2="964">
+      <stop offset="0" stop-color="#7FE3F0"/><stop offset="1" stop-color="#3FB8D6"/>
+    </linearGradient>
+    <clipPath id="clip"><rect x="100" y="100" width="824" height="824" rx="186"/></clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#tile)"/>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#gloss)"/>
+  <g clip-path="url(#clip)">
+    <path d="M512 628 C512 571.5 352 571.5 352 515 L352 386" fill="none" stroke="url(#lf)" stroke-width="34" stroke-linecap="round"/>
+    <path d="M512 842 C512 795.0 672 795.0 672 748 L672 470 C672 394.0 512 394.0 512 318" fill="none" stroke="url(#branch)" stroke-width="34" stroke-linecap="round"/>
+    <path d="M512 964 L512 196" fill="none" stroke="url(#trunk)" stroke-width="34" stroke-linecap="round"/>
+    <circle cx="512" cy="196" r="51" fill="url(#tile)"/><circle cx="512" cy="196" r="51" fill="url(#gloss)"/><circle cx="512" cy="318" r="51" fill="url(#tile)"/><circle cx="512" cy="318" r="51" fill="url(#gloss)"/><circle cx="672" cy="528" r="51" fill="url(#tile)"/><circle cx="672" cy="528" r="51" fill="url(#gloss)"/><circle cx="672" cy="700" r="51" fill="url(#tile)"/><circle cx="672" cy="700" r="51" fill="url(#gloss)"/><circle cx="512" cy="842" r="51" fill="url(#tile)"/><circle cx="512" cy="842" r="51" fill="url(#gloss)"/>
+    <circle cx="352" cy="386" r="51" fill="url(#tile)"/><circle cx="352" cy="386" r="51" fill="url(#gloss)"/><circle cx="352" cy="386" r="42" fill="url(#lf)"/><circle cx="512" cy="628" r="51" fill="url(#tile)"/><circle cx="512" cy="628" r="51" fill="url(#gloss)"/><circle cx="512" cy="628" r="42" fill="url(#trunk)"/>
+    <circle cx="512" cy="196" r="42" fill="url(#trunk)"/>
+    <circle cx="512" cy="842" r="42" fill="url(#trunk)"/>
+    <circle cx="672" cy="528" r="42" fill="url(#branch)"/>
+    <circle cx="672" cy="700" r="42" fill="url(#branch)"/>
+    <circle cx="512" cy="318" r="42" fill="url(#branch)"/><circle cx="512" cy="318" r="24" fill="url(#trunk)"/>
+  </g>
+  <rect x="104" y="104" width="816" height="816" rx="182" fill="none" stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="8"/>
+</svg>
