@@ -21,7 +21,7 @@ const MAX_PATCH_BYTES: usize = 1_000_000;
 const MAX_REVIEW_COMMITS: usize = 2000;
 const MAX_FILE_BYTES: usize = 2_000_000;
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct RepoInfo {
     /// Path to the .git directory (stable handle for reopening).
     pub git_dir: String,

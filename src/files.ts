@@ -13,6 +13,8 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 interface FilesState {
+  /// Repository being browsed, by the path shown for it.
+  repo: string | null;
   rev: string | null;
   /// Directory listings already fetched, keyed by path ("" is the root).
   listings: Map<string, TreeEntry[]>;
@@ -26,6 +28,7 @@ interface FilesState {
 }
 
 const fs: FilesState = {
+  repo: null,
   rev: null,
   listings: new Map(),
   expanded: new Set(),
@@ -94,9 +97,9 @@ function formatSize(bytes: number): string {
 }
 
 async function loadDir(path: string, quiet = false): Promise<void> {
-  if (!fs.rev || fs.listings.has(path)) return;
+  if (!fs.repo || !fs.rev || fs.listings.has(path)) return;
   try {
-    const result = await backend.listTree(fs.rev, path);
+    const result = await backend.listTree(fs.repo, fs.rev, path);
     fs.listings.set(path, result.entries);
   } catch (e) {
     // A directory that another revision had is not an error worth reporting.
@@ -131,7 +134,7 @@ function renderHeader(): void {
       (c.truncated ? `<span class="review-stat warn">shown truncated</span>` : "")
     : "";
 
-  const url = c && fs.rev ? backend.rawUrl(fs.rev, c.path) : null;
+  const url = c && fs.repo && fs.rev ? backend.rawUrl(fs.repo, fs.rev, c.path) : null;
   el.download.hidden = !url;
   if (url) {
     el.download.href = url;
@@ -156,7 +159,7 @@ function renderContent(): void {
   if (c.binary) {
     el.view.innerHTML =
       `<div class="detail-empty">Binary file, ${formatSize(c.size)}.` +
-      (backend.rawUrl(fs.rev!, c.path) ? " Use Download to fetch it." : "") +
+      (backend.rawUrl(fs.repo!, fs.rev!, c.path) ? " Use Download to fetch it." : "") +
       `</div>`;
     return;
   }
@@ -164,14 +167,14 @@ function renderContent(): void {
 }
 
 async function openFile(path: string): Promise<void> {
-  if (!fs.rev) return;
+  if (!fs.repo || !fs.rev) return;
   fs.selected = path;
   for (const node of el.tree.querySelectorAll<HTMLElement>(".tree-file")) {
     node.classList.toggle("selected", node.dataset.file === path);
   }
   el.tree.querySelector(".tree-file.selected")?.scrollIntoView({ block: "nearest" });
   try {
-    fs.content = await backend.readFile(fs.rev, path);
+    fs.content = await backend.readFile(fs.repo, fs.rev, path);
     fs.missing = null;
   } catch (e) {
     toast(`Could not read ${path}: ${e}`);
@@ -193,11 +196,13 @@ function ancestors(path: string): string[] {
 /// over: switching branch shows the same file there, and `openPath` opens one
 /// chosen elsewhere, expanding the tree down to it.
 export async function load(
+  repo: string,
   rev: string,
   label: string,
   atCommit: boolean,
   openPath?: string,
 ): Promise<void> {
+  fs.repo = repo;
   fs.rev = rev;
   el.rev.className = atCommit ? "chip detached" : "chip local";
   el.rev.textContent = atCommit ? `commit ${label}` : label;
@@ -230,6 +235,7 @@ export async function load(
 }
 
 export function clear(why: string): void {
+  fs.repo = null;
   fs.rev = null;
   fs.listings.clear();
   fs.selected = null;

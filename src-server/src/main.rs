@@ -1,7 +1,7 @@
 //! Web variant of the commit browser: serves the same frontend as the Tauri
-//! app over HTTP, backed by one repository named on the command line. Intended
-//! to run on a dev machine and be reached through an SSH tunnel, so it binds
-//! loopback by default and exposes no way to open a different repository.
+//! app over HTTP, backed by the repositories named on the command line.
+//! Intended to run on a dev machine and be reached through an SSH tunnel, so it
+//! binds loopback by default and exposes no repository it was not given.
 //!
 //! The frontend is compiled into the binary, so a release build is one file
 //! that needs nothing beside it. `--static-dir` serves from disk instead, which
@@ -32,12 +32,13 @@ const DEFAULT_LIMIT: usize = 1000;
 #[command(about = "Browse a git repository's commit graph in a web browser")]
 struct Args {
     /// Repository to browse (the working directory, or any path inside it).
-    #[arg(long, short, default_value = ".")]
-    repo: String,
+    /// Repeat to serve more than one; the reader picks between them.
+    #[arg(long, short)]
+    repo: Vec<String>,
 
     /// Address to bind. Defaults to loopback; use 0.0.0.0 to expose the server
-    /// on the network, which grants anyone who can reach it read access to the
-    /// repository.
+    /// on the network, which grants anyone who can reach it read access to
+    /// every repository served.
     #[arg(long, default_value = "127.0.0.1")]
     host: IpAddr,
 
@@ -51,9 +52,37 @@ struct Args {
 }
 
 struct AppState {
-    /// Path to the .git directory. The repo is reopened per request; git2
-    /// handles are cheap to open and not Sync.
-    git_dir: String,
+    /// The repositories named on the command line, in that order. Each is
+    /// reopened per request; git2 handles are cheap to open and not Sync.
+    repos: Vec<gitcore::RepoInfo>,
+}
+
+impl AppState {
+    /// The .git directory of the repository `repo` names, which is the path the
+    /// UI shows. Naming none means the first, so a URL written when the server
+    /// served a single repository still lands somewhere sensible.
+    fn git_dir(&self, repo: Option<&str>) -> Result<String, ApiError> {
+        let found = match repo {
+            Some(path) => self.repos.iter().find(|r| r.display_path == path),
+            None => self.repos.first(),
+        };
+        match found {
+            Some(info) => Ok(info.git_dir.clone()),
+            None => Err(ApiError(
+                StatusCode::NOT_FOUND,
+                format!(
+                    "not a repository this server was given: {}",
+                    repo.unwrap_or("")
+                ),
+            )),
+        }
+    }
+}
+
+/// Names a repository by the path the UI shows, on every request that reads one.
+#[derive(serde::Deserialize)]
+struct RepoParams {
+    repo: Option<String>,
 }
 
 struct ApiError(StatusCode, String);
@@ -77,13 +106,17 @@ where
     }
 }
 
-async fn repo(State(s): State<Arc<AppState>>) -> Result<Json<gitcore::RepoInfo>, ApiError> {
-    let dir = s.git_dir.clone();
-    blocking(move || gitcore::open_repo(&dir)).await
+/// Everything this server was pointed at, in the order it was given them. The
+/// UI has no way to add to the list, so this is the whole of what it can reach.
+async fn repos(State(s): State<Arc<AppState>>) -> Json<Vec<gitcore::RepoInfo>> {
+    Json(s.repos.clone())
 }
 
-async fn refs(State(s): State<Arc<AppState>>) -> Result<Json<gitcore::RefsResult>, ApiError> {
-    let dir = s.git_dir.clone();
+async fn refs(
+    State(s): State<Arc<AppState>>,
+    Query(p): Query<RepoParams>,
+) -> Result<Json<gitcore::RefsResult>, ApiError> {
+    let dir = s.git_dir(p.repo.as_deref())?;
     blocking(move || gitcore::list_refs(&dir)).await
 }
 
@@ -95,9 +128,11 @@ async fn graph(
 ) -> Result<Json<gitcore::GraphResult>, ApiError> {
     let mut branches = Vec::new();
     let mut limit = DEFAULT_LIMIT;
+    let mut repo = None;
     for (key, value) in params {
         match key.as_str() {
             "branch" => branches.push(value),
+            "repo" => repo = Some(value),
             "limit" => {
                 limit = value
                     .parse()
@@ -106,7 +141,7 @@ async fn graph(
             _ => {}
         }
     }
-    let dir = s.git_dir.clone();
+    let dir = s.git_dir(repo.as_deref())?;
     blocking(move || gitcore::graph(&dir, &branches, limit)).await
 }
 
@@ -114,13 +149,14 @@ async fn graph(
 struct ReviewParams {
     base: String,
     head: String,
+    repo: Option<String>,
 }
 
 async fn review(
     State(s): State<Arc<AppState>>,
     Query(p): Query<ReviewParams>,
 ) -> Result<Json<gitcore::ReviewResult>, ApiError> {
-    let dir = s.git_dir.clone();
+    let dir = s.git_dir(p.repo.as_deref())?;
     blocking(move || gitcore::review(&dir, &p.base, &p.head)).await
 }
 
@@ -130,13 +166,14 @@ struct PathParams {
     /// Empty for the root of the tree.
     #[serde(default)]
     path: String,
+    repo: Option<String>,
 }
 
 async fn tree(
     State(s): State<Arc<AppState>>,
     Query(p): Query<PathParams>,
 ) -> Result<Json<gitcore::TreeResult>, ApiError> {
-    let dir = s.git_dir.clone();
+    let dir = s.git_dir(p.repo.as_deref())?;
     blocking(move || gitcore::list_tree(&dir, &p.rev, &p.path)).await
 }
 
@@ -144,7 +181,7 @@ async fn file(
     State(s): State<Arc<AppState>>,
     Query(p): Query<PathParams>,
 ) -> Result<Json<gitcore::FileContent>, ApiError> {
-    let dir = s.git_dir.clone();
+    let dir = s.git_dir(p.repo.as_deref())?;
     blocking(move || gitcore::read_file(&dir, &p.rev, &p.path)).await
 }
 
@@ -183,7 +220,7 @@ async fn raw(
     State(s): State<Arc<AppState>>,
     Query(p): Query<PathParams>,
 ) -> Result<Response, ApiError> {
-    let dir = s.git_dir.clone();
+    let dir = s.git_dir(p.repo.as_deref())?;
     let name = p.path.rsplit('/').next().unwrap_or("download").to_string();
     let bytes = match tokio::task::spawn_blocking(move || gitcore::read_blob(&dir, &p.rev, &p.path))
         .await
@@ -202,8 +239,9 @@ async fn raw(
 async fn commit(
     State(s): State<Arc<AppState>>,
     Path(id): Path<String>,
+    Query(p): Query<RepoParams>,
 ) -> Result<Json<gitcore::CommitDetails>, ApiError> {
-    let dir = s.git_dir.clone();
+    let dir = s.git_dir(p.repo.as_deref())?;
     blocking(move || gitcore::commit_details(&dir, &id)).await
 }
 
@@ -237,16 +275,31 @@ async fn embedded(uri: Uri) -> Response {
 async fn main() -> ExitCode {
     let args = Args::parse();
 
-    let info = match gitcore::open_repo(&args.repo) {
-        Ok(info) => info,
-        Err(e) => {
-            eprintln!("cannot open repository at {}: {e}", args.repo);
-            return ExitCode::FAILURE;
-        }
+    // No --repo at all means the working directory, as it always has.
+    let wanted = if args.repo.is_empty() {
+        vec![".".to_string()]
+    } else {
+        args.repo.clone()
     };
+    let mut opened: Vec<gitcore::RepoInfo> = Vec::new();
+    for path in &wanted {
+        match gitcore::open_repo(path) {
+            // Two --repo arguments can name one repository from different
+            // directories inside it; keep the first and say nothing.
+            Ok(info) => {
+                if !opened.iter().any(|r| r.git_dir == info.git_dir) {
+                    opened.push(info);
+                }
+            }
+            Err(e) => {
+                eprintln!("cannot open repository at {path}: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
 
     let app = Router::new()
-        .route("/api/repo", get(repo))
+        .route("/api/repos", get(repos))
         .route("/api/refs", get(refs))
         .route("/api/graph", get(graph))
         .route("/api/review", get(review))
@@ -279,7 +332,7 @@ async fn main() -> ExitCode {
     };
 
     let app = app.with_state(Arc::new(AppState {
-        git_dir: info.git_dir,
+        repos: opened.clone(),
     }));
 
     let listener = match tokio::net::TcpListener::bind((args.host, args.port)).await {
@@ -289,10 +342,10 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    println!(
-        "commit-browser: {} at http://{}:{}",
-        info.display_path, args.host, args.port
-    );
+    println!("commit-browser: http://{}:{}", args.host, args.port);
+    for info in &opened {
+        println!("  {}", info.display_path);
+    }
 
     if let Err(e) = axum::serve(listener, app)
         .with_graceful_shutdown(async {

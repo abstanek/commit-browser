@@ -299,7 +299,7 @@ async function showCommit(id: string): Promise<void> {
     rs.files = inTreeOrder(rs.result?.files ?? []);
   } else {
     try {
-      const details = await backend.getCommitDetails(id);
+      const details = await backend.getCommitDetails(rs.repo, id);
       rs.files = inTreeOrder(details.files);
       rs.message = details.message;
     } catch (e) {
@@ -333,7 +333,7 @@ export async function load(
   rs.base = base;
   rs.head = head;
   try {
-    rs.result = await backend.getReview(base, head);
+    rs.result = await backend.getReview(repo, base, head);
   } catch (e) {
     toast(`Failed to compare branches: ${e}`);
     rs.result = null;

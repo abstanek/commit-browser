@@ -185,11 +185,156 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+/* The repository selector: a two-line button over a two-line-per-row listbox,
+   since a name alone does not tell two checkouts apart and a path alone is too
+   long to read at a glance. */
+#repo-picker {
+  position: relative;
+  min-width: 0;
+}
+
+#repo-button {
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 22rem;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+#repo-button:hover:not(:disabled) {
+  background: var(--btn-hover);
+  border-color: var(--border);
+}
+
+#repo-button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.repo-caret {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+#repo-button:disabled .repo-caret {
+  visibility: hidden;
+}
+
 #repo-title {
   display: flex;
   flex-direction: column;
   line-height: 1.25;
   min-width: 0;
+}
+
+#repo-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-width: 34rem;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+}
+
+#repo-list {
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.repo-row {
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.repo-row:hover {
+  background: var(--hover);
+}
+
+.repo-row.current {
+  background: var(--btn-active-bg);
+}
+
+.repo-option {
+  font: inherit;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.25;
+}
+
+.repo-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.repo-option-name {
+  font-weight: 600;
+}
+
+.repo-option-path,
+.repo-empty {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-remove {
+  font: inherit;
+  padding: 2px 8px;
+  margin-right: 4px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  /* Faint until the row is in play, but never hidden: a control that only
+     exists on hover cannot be reached by the keyboard at all. */
+  opacity: 0.5;
+}
+
+.repo-row:hover .repo-remove,
+.repo-remove:focus-visible {
+  opacity: 1;
+}
+
+.repo-remove:hover {
+  background: var(--btn-hover);
+  color: var(--stat-del);
+  opacity: 1;
+}
+
+.repo-empty {
+  padding: 8px 10px;
+  margin: 0;
+}
+
+#repo-add {
+  width: calc(100% - 8px);
+  margin: 4px;
 }
 
 #repo-name {

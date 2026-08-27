@@ -120,27 +120,34 @@ export interface FileContent {
 }
 
 /// The repository access the UI needs from its host. The desktop build talks to
-/// Tauri over IPC and can open any repository; the web build talks to the HTTP
-/// server, which is started pointed at a single repository.
+/// Tauri over IPC and keeps its own list of repositories; the web build talks to
+/// the HTTP server, whose list is fixed by the command line it was started with.
+///
+/// Every read names the repository it is about, by the path the host shows for
+/// it, so the two hosts address a repository the same way.
 export interface Backend {
-  /// Opens `path`. Ignored by hosts with a fixed repository.
-  openRepo(path: string): Promise<RepoInfo>;
-  listRefs(): Promise<RefsResult>;
-  getGraph(branches: string[], limit: number): Promise<GraphResult>;
-  getCommitDetails(id: string): Promise<CommitDetails>;
+  /// Every repository this host can reach, in the order it offers them.
+  listRepos(): Promise<RepoInfo[]>;
+  listRefs(repo: string): Promise<RefsResult>;
+  getGraph(repo: string, branches: string[], limit: number): Promise<GraphResult>;
+  getCommitDetails(repo: string, id: string): Promise<CommitDetails>;
   /// Diff `head` against the commit it would merge into, pull-request style.
-  getReview(base: string, head: string): Promise<ReviewResult>;
+  getReview(repo: string, base: string, head: string): Promise<ReviewResult>;
   /// One directory of the tree at `rev`; empty `path` is the root.
-  listTree(rev: string, path: string): Promise<TreeResult>;
-  readFile(rev: string, path: string): Promise<FileContent>;
+  listTree(repo: string, rev: string, path: string): Promise<TreeResult>;
+  readFile(repo: string, rev: string, path: string): Promise<FileContent>;
   /// Link that downloads the file, or null on hosts without one.
-  rawUrl(rev: string, path: string): string | null;
-  /// True when the host chooses the repository, so the UI hides its
-  /// open-repository controls and opens on startup without being asked.
-  readonly fixedRepo: boolean;
+  rawUrl(repo: string, rev: string, path: string): string | null;
   /// True when the host has a real URL, so the app's position can live in the
   /// address bar and be walked with back and forward.
   readonly routable: boolean;
-  /// Directory picker; only present when `fixedRepo` is false.
-  pickRepo?(): Promise<string | null>;
+  /// True when the reader owns the list of repositories, so the UI offers to add
+  /// and remove them. The server fixes its list from the command line instead.
+  readonly editableRepos: boolean;
+  /// Ask for a repository and add it to the list; null if nothing was chosen.
+  /// Only present when `editableRepos`.
+  addRepo?(): Promise<RepoInfo | null>;
+  /// Drop a repository from the list. Nothing on disk is touched. Only present
+  /// when `editableRepos`.
+  removeRepo?(repo: string): Promise<void>;
 }

@@ -1,9 +1,10 @@
 import { backend } from "@backend";
-import type { BranchInfo, CommitDetails, GraphResult, RefsResult } from "./api";
+import type { BranchInfo, CommitDetails, GraphResult, RefsResult, RepoInfo } from "./api";
 import { fileLabel, statsHtml, STATUS_LETTER } from "./diff";
 import { createDiffPane } from "./diffpane";
 import * as files from "./files";
 import { applyPanes, wirePanes } from "./panes";
+import * as repopicker from "./repopicker";
 import { fromUrl, type Route, sameUrl, toUrl } from "./router";
 import { graphWidthPx, renderGraph, rowHeight } from "./graph";
 import * as review from "./review";
@@ -14,7 +15,10 @@ const PAGE = 1000;
 type Mode = "graph" | "review" | "files";
 
 interface AppUiState {
-  repoPath: string | null; // display path, used as persistence key
+  /// Every repository the host offers, and which of them is open. The open one
+  /// is named by its display path, which is also the persistence key.
+  repos: RepoInfo[];
+  repoPath: string | null;
   mode: Mode;
   refs: RefsResult | null;
   enabled: Set<string>; // full ref names, graph mode
@@ -33,6 +37,7 @@ interface AppUiState {
 }
 
 const state: AppUiState = {
+  repos: [],
   repoPath: null,
   mode: "graph",
   refs: null,
@@ -55,11 +60,8 @@ const el = {
   modeFiles: $("mode-files"),
   baseControls: $("base-controls"),
   baseRef: $<HTMLSelectElement>("base-ref"),
-  openRepo: $("open-repo"),
   openRepoEmpty: $("open-repo-empty"),
   refresh: $("refresh"),
-  repoName: $("repo-name"),
-  repoPath: $("repo-path"),
   toggleDetails: $("toggle-details"),
   themeToggle: $("theme-toggle"),
   fontSmaller: $<HTMLButtonElement>("font-smaller"),
@@ -469,7 +471,7 @@ async function loadFiles(): Promise<void> {
   }
   const commit = isCommitRev(state.rev);
   const label = commit ? state.rev.slice(0, 7) : shortRef(state.rev);
-  await files.load(state.rev, label, commit, open ?? undefined);
+  await files.load(state.repoPath ?? "", state.rev, label, commit, open ?? undefined);
   // Which file ended up open is only known now, so complete the entry.
   syncUrl(true);
 }
@@ -508,10 +510,12 @@ function resolveRef(name: string | undefined): string | null {
 }
 
 function currentRoute(): Route {
+  const repo = state.repoPath ?? undefined;
   if (state.mode === "review") {
     const showing = review.showing();
     return {
       view: "review",
+      repo,
       head: state.head ? refParam(state.head) : undefined,
       base: state.base ? refParam(state.base) : undefined,
       commit: showing === "all" ? undefined : showing,
@@ -520,11 +524,12 @@ function currentRoute(): Route {
   if (state.mode === "files") {
     return {
       view: "files",
+      repo,
       rev: state.rev ? refParam(state.rev) : undefined,
       path: files.openPath() ?? undefined,
     };
   }
-  return { view: "graph", commit: state.selectedId ?? undefined };
+  return { view: "graph", repo, commit: state.selectedId ?? undefined };
 }
 
 /// Record where the app now is. Deliberate moves add to the history; ones the
@@ -538,6 +543,14 @@ function syncUrl(replace = false): void {
 }
 
 async function applyRoute(route: Route): Promise<void> {
+  // Switching repository reloads refs and the graph and then applies the route
+  // itself, so hand the whole thing over rather than carrying on here.
+  const other = knownRepo(route.repo);
+  if (other && other !== state.repoPath) {
+    startRoute = route;
+    await openRepo(other);
+    return;
+  }
   applyingRoute = true;
   try {
     if (route.view === "review") {
@@ -634,7 +647,7 @@ function renderCommitList(): void {
 async function refreshGraph(): Promise<void> {
   if (!state.repoPath) return;
   try {
-    state.graph = await backend.getGraph([...state.enabled], state.limit);
+    state.graph = await backend.getGraph(state.repoPath!, [...state.enabled], state.limit);
   } catch (e) {
     toast(`Failed to load graph: ${e}`);
     return;
@@ -691,7 +704,7 @@ async function selectCommit(
       ?.scrollIntoView({ block: "nearest" });
   }
   try {
-    state.details = await backend.getCommitDetails(id);
+    state.details = await backend.getCommitDetails(state.repoPath!, id);
     state.selectedFile = 0;
   } catch (e) {
     toast(`Failed to load commit: ${e}`);
@@ -768,28 +781,52 @@ function setDetailsVisible(visible: boolean): void {
   if (!visible) setFocus("commits");
 }
 
-// ------------------------------------------------------------------ open repo
+// ----------------------------------------------------------------- repositories
 
-async function openRepo(path: string): Promise<void> {
-  let info;
+/// Re-read the host's list of repositories and redraw the picker. The desktop
+/// build's list is the reader's own; the server's is fixed by its command line.
+async function loadRepos(): Promise<void> {
   try {
-    info = await backend.openRepo(path);
+    state.repos = await backend.listRepos();
   } catch (e) {
-    toast(`Could not open repository: ${e}`);
-    if (backend.fixedRepo) el.emptyHint.textContent = `Server error: ${e}`;
-    return;
+    state.repos = [];
+    el.emptyHint.textContent = `Could not list repositories: ${e}`;
   }
-  state.repoPath = info.display_path;
+  repopicker.render(state.repos, state.repoPath);
+}
+
+function knownRepo(path: string | null | undefined): string | null {
+  return path && state.repos.some((r) => r.display_path === path) ? path : null;
+}
+
+/// Nothing to browse: say so in the terms of whichever host this is.
+function showNoRepo(): void {
+  state.repoPath = null;
+  state.refs = null;
+  state.graph = null;
+  repopicker.render(state.repos, null);
+  el.emptyState.hidden = false;
+  el.emptyHint.textContent = backend.editableRepos
+    ? "Add a git repository to browse its commit graph."
+    : "The server was given no repositories.";
+  el.openRepoEmpty.hidden = !backend.editableRepos;
+}
+
+/// Open a repository from the host's list. `push` marks a switch the reader
+/// asked for, which is a move like any other and earns its own history entry;
+/// the entry is refined once the refs have settled what is on screen.
+async function openRepo(path: string, push = false): Promise<void> {
+  state.repoPath = path;
   state.limit = PAGE;
   state.selectedId = null;
   state.details = null;
-  if (!backend.fixedRepo) store.setLastRepo(path);
-  el.repoName.textContent = info.name;
-  el.repoPath.textContent = info.display_path;
+  store.setLastRepo(path);
+  repopicker.render(state.repos, path);
   el.emptyState.hidden = true;
+  if (push) syncUrl();
 
   try {
-    state.refs = await backend.listRefs();
+    state.refs = await backend.listRefs(state.repoPath);
   } catch (e) {
     toast(`Could not list branches: ${e}`);
     return;
@@ -828,7 +865,7 @@ async function openRepo(path: string): Promise<void> {
 async function refreshAll(): Promise<void> {
   if (!state.repoPath) return;
   try {
-    state.refs = await backend.listRefs();
+    state.refs = await backend.listRefs(state.repoPath);
   } catch (e) {
     toast(`Refresh failed: ${e}`);
     return;
@@ -855,24 +892,46 @@ async function refreshAll(): Promise<void> {
   }
 }
 
-async function chooseRepo(): Promise<void> {
-  const dir = await backend.pickRepo?.();
-  if (dir) await openRepo(dir);
+async function addRepo(): Promise<void> {
+  let info;
+  try {
+    info = await backend.addRepo?.();
+  } catch (e) {
+    toast(`Could not add repository: ${e}`);
+    return;
+  }
+  if (!info) return;
+  await loadRepos();
+  await openRepo(info.display_path, true);
+}
+
+/// Take a repository out of the list. Only the list is touched; the repository
+/// itself is left where it is.
+async function removeRepo(path: string): Promise<void> {
+  await backend.removeRepo?.(path);
+  await loadRepos();
+  if (state.repoPath !== path) return;
+  // The open one just went: fall back to whatever is left.
+  const next = state.repos[0]?.display_path;
+  if (next) await openRepo(next);
+  else showNoRepo();
 }
 
 // -------------------------------------------------------------------- wiring
 
 function wire(): void {
-  // The web build browses whichever repository the server was pointed at, so
-  // there is nothing to choose.
-  el.openRepo.hidden = backend.fixedRepo;
-  el.openRepoEmpty.hidden = backend.fixedRepo;
-  if (backend.fixedRepo) {
-    el.emptyHint.textContent = "Connecting to the commit-browser server…";
+  // Only the desktop build lets the reader change the list; the server's is
+  // settled by the command line it was started with.
+  el.openRepoEmpty.hidden = !backend.editableRepos;
+  if (backend.editableRepos) {
+    el.openRepoEmpty.addEventListener("click", () => void addRepo());
   } else {
-    el.openRepo.addEventListener("click", () => void chooseRepo());
-    el.openRepoEmpty.addEventListener("click", () => void chooseRepo());
+    el.emptyHint.textContent = "Connecting to the commit-browser server…";
   }
+  repopicker.wire(backend.editableRepos);
+  repopicker.onSelect((repo) => void openRepo(repo, true));
+  repopicker.onAdd(() => void addRepo());
+  repopicker.onRemove((repo) => void removeRepo(repo));
   el.refresh.addEventListener("click", () => void refreshAll());
   el.loadMore.addEventListener("click", () => {
     state.limit += PAGE;
@@ -1091,10 +1150,14 @@ async function init(): Promise<void> {
   startRoute = backend.routable ? fromUrl(new URL(location.href)) : null;
   setMode(startRoute?.view ?? store.mode(), false);
   renderDetails();
-  // The server picks the repository for the web build, which ignores the path;
-  // the desktop build reopens whatever was open last.
-  const last = backend.fixedRepo ? "" : store.lastRepo();
-  if (last !== null) await openRepo(last);
+  await loadRepos();
+  // A repository named in the address bar wins - it is where the reader asked
+  // to be - then the one open last, then whatever the host offers first.
+  const wanted =
+    knownRepo(startRoute?.repo) ?? knownRepo(store.lastRepo()) ??
+    state.repos[0]?.display_path ?? null;
+  if (wanted) await openRepo(wanted);
+  else showNoRepo();
 }
 
 void init();

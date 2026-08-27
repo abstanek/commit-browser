@@ -10,6 +10,9 @@ export type View = "graph" | "review" | "files";
 
 export interface Route {
   view: View;
+  /// The repository being browsed, by the path shown for it. Absent in a URL
+  /// written when the host served only one.
+  repo?: string;
   /// Graph: the selected commit. Review: the commit whose own diff is shown.
   commit?: string;
   /// Review: the branches being compared, by short name.
@@ -26,6 +29,8 @@ function isView(s: string): s is View {
 
 export function toUrl(route: Route): string {
   const q = new URLSearchParams();
+  // First, so the repository reads as the thing the rest of the URL is within.
+  if (route.repo) q.set("repo", route.repo);
   if (route.view === "review") {
     if (route.head) q.set("head", route.head);
     if (route.base) q.set("base", route.base);
@@ -50,6 +55,7 @@ export function fromUrl(url: URL): Route | null {
   const value = (name: string) => q.get(name) || undefined;
   return {
     view,
+    repo: value("repo"),
     commit: value("commit"),
     base: value("base"),
     head: value("head"),

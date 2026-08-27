@@ -1,83 +1,55 @@
-use std::sync::Mutex;
-
-use tauri::State;
-
-/// Path to the currently opened repository's .git directory. The repo is
-/// reopened per command; git2 handles are cheap to open and not Sync.
-#[derive(Default)]
-struct AppState {
-    git_dir: Mutex<Option<String>>,
+/// Every command names the repository it reads, by the path the UI shows. The
+/// repository is reopened per command; git2 handles are cheap to open and not
+/// Sync, and the list of repositories lives in the frontend, which is what the
+/// reader adds to and removes from.
+fn git_dir(repo: &str) -> Result<String, String> {
+    Ok(gitcore::open_repo(repo)?.git_dir)
 }
 
-fn current_repo(state: &State<AppState>) -> Result<String, String> {
-    state
-        .git_dir
-        .lock()
-        .unwrap()
-        .clone()
-        .ok_or_else(|| "no repository opened".to_string())
+/// Reads a repository so the UI can name it, and confirms the path holds one
+/// before it is added to the list.
+#[tauri::command]
+fn open_repo(path: String) -> Result<gitcore::RepoInfo, String> {
+    gitcore::open_repo(&path)
 }
 
 #[tauri::command]
-fn open_repo(path: String, state: State<AppState>) -> Result<gitcore::RepoInfo, String> {
-    let info = gitcore::open_repo(&path)?;
-    *state.git_dir.lock().unwrap() = Some(info.git_dir.clone());
-    Ok(info)
-}
-
-#[tauri::command]
-fn list_refs(state: State<AppState>) -> Result<gitcore::RefsResult, String> {
-    gitcore::list_refs(&current_repo(&state)?)
+fn list_refs(repo: String) -> Result<gitcore::RefsResult, String> {
+    gitcore::list_refs(&git_dir(&repo)?)
 }
 
 #[tauri::command]
 fn get_graph(
+    repo: String,
     branches: Vec<String>,
     limit: usize,
-    state: State<AppState>,
 ) -> Result<gitcore::GraphResult, String> {
-    gitcore::graph(&current_repo(&state)?, &branches, limit)
+    gitcore::graph(&git_dir(&repo)?, &branches, limit)
 }
 
 #[tauri::command]
-fn get_commit_details(
-    id: String,
-    state: State<AppState>,
-) -> Result<gitcore::CommitDetails, String> {
-    gitcore::commit_details(&current_repo(&state)?, &id)
+fn get_commit_details(repo: String, id: String) -> Result<gitcore::CommitDetails, String> {
+    gitcore::commit_details(&git_dir(&repo)?, &id)
 }
 
 #[tauri::command]
-fn get_review(
-    base: String,
-    head: String,
-    state: State<AppState>,
-) -> Result<gitcore::ReviewResult, String> {
-    gitcore::review(&current_repo(&state)?, &base, &head)
+fn get_review(repo: String, base: String, head: String) -> Result<gitcore::ReviewResult, String> {
+    gitcore::review(&git_dir(&repo)?, &base, &head)
 }
 
 #[tauri::command]
-fn list_tree(
-    rev: String,
-    path: String,
-    state: State<AppState>,
-) -> Result<gitcore::TreeResult, String> {
-    gitcore::list_tree(&current_repo(&state)?, &rev, &path)
+fn list_tree(repo: String, rev: String, path: String) -> Result<gitcore::TreeResult, String> {
+    gitcore::list_tree(&git_dir(&repo)?, &rev, &path)
 }
 
 #[tauri::command]
-fn read_file(
-    rev: String,
-    path: String,
-    state: State<AppState>,
-) -> Result<gitcore::FileContent, String> {
-    gitcore::read_file(&current_repo(&state)?, &rev, &path)
+fn read_file(repo: String, rev: String, path: String) -> Result<gitcore::FileContent, String> {
+    gitcore::read_file(&git_dir(&repo)?, &rev, &path)
 }
 
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             open_repo,
             list_refs,

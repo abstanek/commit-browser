@@ -29,13 +29,21 @@
           <button id="mode-review" class="btn">Review</button>
           <button id="mode-files" class="btn">Files</button>
         </div>
-        <button id="open-repo" class="btn">Open Repository…</button>
         <button id="refresh" class="btn" title="Re-read branches and commits from disk (F5)">
           ⟳ Refresh
         </button>
-        <div id="repo-title">
-          <span id="repo-name">No repository</span>
-          <span id="repo-path"></span>
+        <div id="repo-picker">
+          <button id="repo-button" aria-haspopup="listbox" aria-expanded="false" title="Choose the repository to browse">
+            <span id="repo-title">
+              <span id="repo-name">No repository</span>
+              <span id="repo-path"></span>
+            </span>
+            <span class="repo-caret">▾</span>
+          </button>
+          <div id="repo-menu" hidden>
+            <div id="repo-list" role="listbox" aria-label="Repositories"></div>
+            <button id="repo-add" class="btn">Add repository…</button>
+          </div>
         </div>
         <div class="spacer"></div>
         <div class="segmented" role="group">
@@ -184,8 +192,8 @@
       <div id="empty-state">
         <div>
           <h2>Commit Browser</h2>
-          <p id="empty-hint">Open a git repository to browse its commit graph.</p>
-          <button id="open-repo-empty" class="btn primary">Open Repository…</button>
+          <p id="empty-hint">Add a git repository to browse its commit graph.</p>
+          <button id="open-repo-empty" class="btn primary">Add Repository…</button>
         </div>
       </div>
     </div>

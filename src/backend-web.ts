@@ -26,20 +26,27 @@ async function get<T>(path: string): Promise<T> {
 }
 
 export const backend: Backend = {
-  openRepo: () => get<RepoInfo>("repo"),
-  listRefs: () => get<RefsResult>("refs"),
-  getGraph: (branches, limit) => {
-    const q = new URLSearchParams();
+  listRepos: () => get<RepoInfo[]>("repos"),
+  listRefs: (repo) => get<RefsResult>(`refs?${new URLSearchParams({ repo })}`),
+  getGraph: (repo, branches, limit) => {
+    const q = new URLSearchParams({ repo });
     for (const b of branches) q.append("branch", b);
     q.set("limit", String(limit));
     return get<GraphResult>(`graph?${q}`);
   },
-  getCommitDetails: (id) => get<CommitDetails>(`commits/${encodeURIComponent(id)}`),
-  getReview: (base, head) =>
-    get<ReviewResult>(`review?${new URLSearchParams({ base, head })}`),
-  listTree: (rev, path) => get<TreeResult>(`tree?${new URLSearchParams({ rev, path })}`),
-  readFile: (rev, path) => get<FileContent>(`file?${new URLSearchParams({ rev, path })}`),
-  rawUrl: (rev, path) => `/api/raw?${new URLSearchParams({ rev, path })}`,
-  fixedRepo: true,
+  getCommitDetails: (repo, id) =>
+    get<CommitDetails>(
+      `commits/${encodeURIComponent(id)}?${new URLSearchParams({ repo })}`,
+    ),
+  getReview: (repo, base, head) =>
+    get<ReviewResult>(`review?${new URLSearchParams({ repo, base, head })}`),
+  listTree: (repo, rev, path) =>
+    get<TreeResult>(`tree?${new URLSearchParams({ repo, rev, path })}`),
+  readFile: (repo, rev, path) =>
+    get<FileContent>(`file?${new URLSearchParams({ repo, rev, path })}`),
+  rawUrl: (repo, rev, path) => `/api/raw?${new URLSearchParams({ repo, rev, path })}`,
   routable: true,
+  // The server is pointed at its repositories on the command line; the reader
+  // browsing it has no say in the list.
+  editableRepos: false,
 };
