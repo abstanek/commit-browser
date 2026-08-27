@@ -60,11 +60,17 @@ export const backend: Backend = {
   routable: false,
   editableRepos: true,
   async addRepo() {
-    const dir = await openDialog({ directory: true, title: "Add git repository" });
-    if (typeof dir !== "string") return null;
+    const chosen = await openDialog({ directory: true, title: "Add git repository" });
+    // Cancelling is the ordinary way out of the dialog and means nothing was
+    // added. Anything else that is not a path is the host surprising us, and
+    // saying so is better than the button appearing to do nothing.
+    if (chosen === null || chosen === undefined) return null;
+    if (typeof chosen !== "string") {
+      throw new Error(`the file dialog gave back ${JSON.stringify(chosen)} rather than a path`);
+    }
     // Opening it first both checks that it holds a repository and settles the
     // path to store, which is the repository's root rather than what was picked.
-    const info = await invoke<RepoInfo>("open_repo", { path: dir });
+    const info = await invoke<RepoInfo>("open_repo", { path: chosen });
     const paths = storedPaths();
     if (!paths.includes(info.display_path)) setStoredPaths([...paths, info.display_path]);
     return info;
