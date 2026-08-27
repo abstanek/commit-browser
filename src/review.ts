@@ -367,6 +367,15 @@ function step(delta: number): void {
   void showCommit(el.commitSelect.options[i].value);
 }
 
+/// The files view opens what the diff is showing: one commit's own version of
+/// the file, or the branch tip when the whole branch is in view.
+export function onOpenFile(cb: (rev: string, path: string) => void): void {
+  pane.onOpenFile((path) => {
+    const rev = rs.showing === ALL ? rs.head : rs.showing;
+    if (rev) cb(rev, path);
+  });
+}
+
 export function wire(): void {
   el.message.addEventListener("click", (ev) => {
     if (!(ev.target as HTMLElement).closest(".msg-toggle")) return;

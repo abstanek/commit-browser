@@ -24,6 +24,8 @@ export interface DiffPane {
   /// `scope` names what is being diffed, so folded lines are remembered
   /// against that comparison rather than leaking between commits.
   show(files: FileDiff[], empty: string, scope?: string): void;
+  /// Offer a link beside each file name that hands the path to `cb`.
+  onOpenFile(cb: (path: string) => void): void;
   /// Make `index` current, optionally scrolling it to the top of the pane.
   select(index: number, scroll: boolean): void;
   /// Called when scrolling brings a different file to the top.
@@ -40,6 +42,7 @@ export function createDiffPane(root: HTMLElement): DiffPane {
   let selfScroll = false;
   let pending = false;
   let scope = "";
+  let openFile: ((path: string) => void) | null = null;
   /// Folded line ranges per file index, and the line range being selected.
   let folds: Range[][] = [];
   let picked: { file: number; from: number; to: number } | null = null;
@@ -70,11 +73,16 @@ export function createDiffPane(root: HTMLElement): DiffPane {
 
   function blockHtml(f: FileDiff, index: number): string {
     const hidden = folds[index] ?? [];
+    // A deleted file is not there to be browsed at this revision.
+    const open =
+      openFile && f.status !== "deleted"
+        ? `<button class="linkbtn open-file" title="Open this file in the Files view">↗</button>`
+        : "";
     return (
       `<section class="diff-block" data-i="${index}">` +
       `<div class="diff-head">` +
       `<span class="status ${f.status}">${STATUS_LETTER[f.status] ?? "?"}</span>` +
-      `<span class="diff-path">${fileLabel(f)}</span>${statsHtml(f)}` +
+      `<span class="diff-path">${fileLabel(f)}</span>${open}${statsHtml(f)}` +
       `<span class="diff-actions">${actionsHtml(index)}</span></div>` +
       patchHtml(f, hidden) +
       `</section>`
@@ -159,6 +167,10 @@ export function createDiffPane(root: HTMLElement): DiffPane {
     if (!block) return;
     const index = Number(block.dataset.i);
 
+    if (target.closest(".open-file")) {
+      openFile?.(files[index].path);
+      return;
+    }
     if (target.closest("[data-unfold-all]")) {
       setFolds(index, []);
       return;
@@ -291,6 +303,10 @@ export function createDiffPane(root: HTMLElement): DiffPane {
 
     onSelect(cb) {
       notify = cb;
+    },
+
+    onOpenFile(cb) {
+      openFile = cb;
     },
   };
 }

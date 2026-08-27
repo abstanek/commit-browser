@@ -17,8 +17,12 @@ interface FilesState {
   /// Directory listings already fetched, keyed by path ("" is the root).
   listings: Map<string, TreeEntry[]>;
   expanded: Set<string>;
+  /// The open file, kept across revisions so switching branch shows the same
+  /// file where it exists.
   selected: string | null;
   content: FileContent | null;
+  /// Why the open file has no content at this revision, if it has none.
+  missing: string | null;
 }
 
 const fs: FilesState = {
@@ -27,6 +31,7 @@ const fs: FilesState = {
   expanded: new Set(),
   selected: null,
   content: null,
+  missing: null,
 };
 
 const el = {
@@ -88,14 +93,22 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} M`;
 }
 
-async function loadDir(path: string): Promise<void> {
+async function loadDir(path: string, quiet = false): Promise<void> {
   if (!fs.rev || fs.listings.has(path)) return;
   try {
     const result = await backend.listTree(fs.rev, path);
     fs.listings.set(path, result.entries);
   } catch (e) {
-    toast(`Could not read ${path || "the repository root"}: ${e}`);
+    // A directory that another revision had is not an error worth reporting.
+    if (!quiet) toast(`Could not read ${path || "the repository root"}: ${e}`);
   }
+}
+
+/// Whether the loaded listings show `path` as a file at this revision.
+function isKnownFile(path: string): boolean {
+  const cut = path.lastIndexOf("/");
+  const parent = cut === -1 ? "" : path.slice(0, cut);
+  return (fs.listings.get(parent) ?? []).some((e) => e.path === path && e.kind !== "dir");
 }
 
 async function toggleDir(path: string): Promise<void> {
@@ -136,7 +149,8 @@ function crumbsHtml(path: string): string {
 function renderContent(): void {
   const c = fs.content;
   if (!c) {
-    el.view.innerHTML = `<div class="detail-empty">Select a file.</div>`;
+    const why = fs.missing ?? "Select a file.";
+    el.view.innerHTML = `<div class="detail-empty">${escapeHtml(why)}</div>`;
     return;
   }
   if (c.binary) {
@@ -155,8 +169,10 @@ async function openFile(path: string): Promise<void> {
   for (const node of el.tree.querySelectorAll<HTMLElement>(".tree-file")) {
     node.classList.toggle("selected", node.dataset.file === path);
   }
+  el.tree.querySelector(".tree-file.selected")?.scrollIntoView({ block: "nearest" });
   try {
     fs.content = await backend.readFile(fs.rev, path);
+    fs.missing = null;
   } catch (e) {
     toast(`Could not read ${path}: ${e}`);
     fs.content = null;
@@ -167,22 +183,47 @@ async function openFile(path: string): Promise<void> {
 
 // --------------------------------------------------------------------- state
 
-/// Browse `rev`, keeping the open file if it still exists there.
-export async function load(rev: string, label: string): Promise<void> {
-  const sameRev = fs.rev === rev;
+/// Every directory above `path`, outermost first.
+function ancestors(path: string): string[] {
+  const parts = path.split("/").slice(0, -1);
+  return parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+}
+
+/// Browse `rev`, which may be a branch or any commit. The open file is carried
+/// over: switching branch shows the same file there, and `openPath` opens one
+/// chosen elsewhere, expanding the tree down to it.
+export async function load(
+  rev: string,
+  label: string,
+  atCommit: boolean,
+  openPath?: string,
+): Promise<void> {
   fs.rev = rev;
-  el.rev.textContent = label;
+  el.rev.className = atCommit ? "chip detached" : "chip local";
+  el.rev.textContent = atCommit ? `commit ${label}` : label;
+
+  const target = openPath ?? fs.selected;
+  if (target) for (const dir of ancestors(target)) fs.expanded.add(dir);
+
   fs.listings.clear();
   await loadDir("");
   // Re-fetch the directories that were open, so the tree keeps its shape.
-  for (const path of [...fs.expanded].sort()) await loadDir(path);
+  // Quietly: this revision need not have all of them.
+  for (const path of [...fs.expanded].sort()) await loadDir(path, true);
   renderTree();
 
-  if (sameRev && fs.selected) {
-    await openFile(fs.selected);
-  } else {
-    fs.selected = null;
+  if (target && isKnownFile(target)) {
+    await openFile(target);
+  } else if (target) {
+    // Keep it selected, so returning to a revision that has it opens it again.
+    fs.selected = target;
     fs.content = null;
+    fs.missing = `${target} is not in this revision.`;
+    renderHeader();
+    renderContent();
+  } else {
+    fs.content = null;
+    fs.missing = null;
     renderHeader();
     renderContent();
   }
@@ -193,6 +234,8 @@ export function clear(why: string): void {
   fs.listings.clear();
   fs.selected = null;
   fs.content = null;
+  fs.missing = null;
+  el.rev.className = "chip local";
   el.rev.textContent = "";
   el.tree.innerHTML = `<div class="detail-empty">${escapeHtml(why)}</div>`;
   renderHeader();

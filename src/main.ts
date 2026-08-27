@@ -408,9 +408,12 @@ function syncRefSelections(): void {
   const savedRev = state.repoPath ? store.revFor(state.repoPath) : null;
   if (!state.head && saved && existing.has(saved.head)) state.head = saved.head;
   if (!state.base && saved && existing.has(saved.base)) state.base = saved.base;
-  if (!state.rev && savedRev && existing.has(savedRev)) state.rev = savedRev;
+  if (!state.rev && savedRev && (isCommitRev(savedRev) || existing.has(savedRev))) {
+    state.rev = savedRev;
+  }
   if (state.head && !existing.has(state.head)) state.head = null;
-  if (state.rev && !existing.has(state.rev)) state.rev = null;
+  // A commit rev stands on its own; only branch selections need to still exist.
+  if (state.rev && !isCommitRev(state.rev) && !existing.has(state.rev)) state.rev = null;
   if (state.base && (!existing.has(state.base) || state.base === state.head)) {
     state.base = null;
   }
@@ -441,9 +444,33 @@ function persistRev(): void {
   if (state.repoPath && state.rev) store.setRevFor(state.repoPath, state.rev);
 }
 
+/// Anything that is not a full ref name is a commit browsed on its own, with
+/// no branch selected in the sidebar.
+function isCommitRev(rev: string): boolean {
+  return !rev.startsWith("refs/");
+}
+
+/// Set by the diff views, consumed by the next files load.
+let pendingFile: string | null = null;
+
 async function loadFiles(): Promise<void> {
-  if (!state.rev) files.clear("Pick a branch to browse.");
-  else await files.load(state.rev, shortRef(state.rev));
+  const open = pendingFile;
+  pendingFile = null;
+  if (!state.rev) {
+    files.clear("Pick a branch to browse.");
+    return;
+  }
+  const commit = isCommitRev(state.rev);
+  const label = commit ? state.rev.slice(0, 7) : shortRef(state.rev);
+  await files.load(state.rev, label, commit, open ?? undefined);
+}
+
+/// Follow a diff's file into the files view, at the revision it was read from.
+function openInFiles(rev: string, path: string): void {
+  pendingFile = path;
+  state.rev = rev;
+  persistRev();
+  setMode("files");
 }
 
 function setMode(mode: Mode): void {
@@ -746,6 +773,10 @@ function wire(): void {
   el.modeReview.addEventListener("click", () => setMode("review"));
   el.modeFiles.addEventListener("click", () => setMode("files"));
   review.wire();
+  review.onOpenFile(openInFiles);
+  detailPane.onOpenFile((path) => {
+    if (state.selectedId) openInFiles(state.selectedId, path);
+  });
   files.wire();
 
   el.baseRef.addEventListener("change", () => {

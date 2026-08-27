@@ -555,6 +555,22 @@ body {
   box-shadow: 0 0 0 1.5px var(--chip-local-border);
 }
 
+/* A revision browsed on its own, rather than through a branch. */
+.chip.detached {
+  background: var(--btn-active-bg);
+  border-style: dashed;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.open-file {
+  flex: none;
+  font-size: 0.92rem;
+  line-height: 1;
+  padding: 0 4px;
+}
+
 #load-more {
   display: block;
   margin: 10px auto;
