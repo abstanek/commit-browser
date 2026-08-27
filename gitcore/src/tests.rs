@@ -14,7 +14,12 @@ impl TestRepo {
         let dir = TempDir::new().unwrap();
         let repo = Repository::init(dir.path()).unwrap();
         let path = repo.path().to_string_lossy().into_owned();
-        TestRepo { _dir: dir, repo, path, clock: 1_700_000_000 }
+        TestRepo {
+            _dir: dir,
+            repo,
+            path,
+            clock: 1_700_000_000,
+        }
     }
 
     /// Create a commit with the given parents and file contents, and point
@@ -86,8 +91,12 @@ fn open_and_list_refs() {
 #[test]
 fn remote_branches_grouped_by_remote() {
     let (t, oids) = sample();
-    t.repo.remote("origin", "https://example.invalid/r.git").unwrap();
-    t.repo.remote("upstream", "https://example.invalid/u.git").unwrap();
+    t.repo
+        .remote("origin", "https://example.invalid/r.git")
+        .unwrap();
+    t.repo
+        .remote("upstream", "https://example.invalid/u.git")
+        .unwrap();
     t.repo
         .reference("refs/remotes/origin/main", oids[5], true, "test")
         .unwrap();
@@ -110,7 +119,9 @@ fn remote_branches_grouped_by_remote() {
 #[test]
 fn branch_filtering_hides_unreachable_commits() {
     let (t, oids) = sample();
-    let [_a, _b, _c, topic, _m, _f] = oids[..] else { panic!() };
+    let [_a, _b, _c, topic, _m, _f] = oids[..] else {
+        panic!()
+    };
 
     // Only main enabled: topic's commit must not appear, feature's C must
     // (it was merged into main).
@@ -167,7 +178,11 @@ fn layout_is_continuous_and_within_width() {
     let (t, _) = sample();
     let g = graph(
         &t.path,
-        &["refs/heads/main".into(), "refs/heads/topic".into(), "refs/heads/feature".into()],
+        &[
+            "refs/heads/main".into(),
+            "refs/heads/topic".into(),
+            "refs/heads/feature".into(),
+        ],
         100,
     )
     .unwrap();
@@ -208,7 +223,11 @@ fn ref_labels_present() {
     let f = oids[5];
     let g = graph(&t.path, &["refs/heads/main".into()], 100).unwrap();
     let tip = g.rows.iter().find(|r| r.id == f.to_string()).unwrap();
-    assert!(tip.refs.iter().any(|l| l.name == "main" && l.kind == "local"));
+    assert!(
+        tip.refs
+            .iter()
+            .any(|l| l.name == "main" && l.kind == "local")
+    );
     assert_eq!(g.head_id, Some(f.to_string()));
 }
 
@@ -238,7 +257,9 @@ fn details_root_commit() {
 #[test]
 fn review_unmerged_branch() {
     let (t, oids) = sample();
-    let [_a, b, _c, topic, _m, f] = oids[..] else { panic!() };
+    let [_a, b, _c, topic, _m, f] = oids[..] else {
+        panic!()
+    };
     let r = review(&t.path, "refs/heads/main", "refs/heads/topic").unwrap();
 
     assert_eq!(r.merge_base, Some(b.to_string()));
@@ -272,7 +293,9 @@ fn review_of_merged_branch_is_empty() {
 #[test]
 fn review_the_other_way_round() {
     let (t, oids) = sample();
-    let [_a, b, c, _topic, m, f] = oids[..] else { panic!() };
+    let [_a, b, c, _topic, m, f] = oids[..] else {
+        panic!()
+    };
     let r = review(&t.path, "refs/heads/feature", "refs/heads/main").unwrap();
     let got: Vec<_> = r.commits.iter().map(|c| c.id.clone()).collect();
     assert_eq!(got, vec![f.to_string(), m.to_string(), b.to_string()]);
@@ -309,7 +332,9 @@ fn review_unrelated_histories_shows_whole_branch() {
 #[test]
 fn review_accepts_raw_commit_ids() {
     let (t, oids) = sample();
-    let [_a, b, _c, topic, ..] = oids[..] else { panic!() };
+    let [_a, b, _c, topic, ..] = oids[..] else {
+        panic!()
+    };
     let r = review(&t.path, &b.to_string(), &topic.to_string()).unwrap();
     assert_eq!(r.commits.len(), 1);
     assert_eq!(r.merge_base, Some(b.to_string()));
@@ -330,9 +355,13 @@ fn nested() -> (TestRepo, Oid) {
         root.insert("src", inner_id, 0o040000).unwrap();
         root.insert("README.md", readme, 0o100644).unwrap();
         let tree = t.repo.find_tree(root.write().unwrap()).unwrap();
-        t.repo.commit(None, &sig, &sig, "nested", &tree, &[]).unwrap()
+        t.repo
+            .commit(None, &sig, &sig, "nested", &tree, &[])
+            .unwrap()
     };
-    t.repo.reference("refs/heads/main", oid, true, "test").unwrap();
+    t.repo
+        .reference("refs/heads/main", oid, true, "test")
+        .unwrap();
     (t, oid)
 }
 
@@ -369,7 +398,10 @@ fn read_file_and_blob() {
     assert_eq!(f.commit, oid.to_string());
 
     // Raw bytes come back untouched, and any rev spelling resolves.
-    assert_eq!(read_blob(&t.path, &oid.to_string(), "README.md").unwrap(), b"# Title\n");
+    assert_eq!(
+        read_blob(&t.path, &oid.to_string(), "README.md").unwrap(),
+        b"# Title\n"
+    );
     assert!(read_file(&t.path, "refs/heads/main", "nope.txt").is_err());
     assert!(read_file(&t.path, "refs/heads/main", "src").is_err());
 }
@@ -382,21 +414,33 @@ fn read_file_flags_binary_content() {
     let mut root = t.repo.treebuilder(None).unwrap();
     root.insert("data.bin", blob, 0o100644).unwrap();
     let tree = t.repo.find_tree(root.write().unwrap()).unwrap();
-    let oid = t.repo.commit(None, &sig, &sig, "binary", &tree, &[]).unwrap();
-    t.repo.reference("refs/heads/main", oid, true, "test").unwrap();
+    let oid = t
+        .repo
+        .commit(None, &sig, &sig, "binary", &tree, &[])
+        .unwrap();
+    t.repo
+        .reference("refs/heads/main", oid, true, "test")
+        .unwrap();
 
     let f = read_file(&t.path, "refs/heads/main", "data.bin").unwrap();
     assert!(f.binary);
     assert!(f.text.is_empty());
     assert_eq!(f.size, 6);
     // The bytes are still downloadable even though they are not displayable.
-    assert_eq!(read_blob(&t.path, "refs/heads/main", "data.bin").unwrap().len(), 6);
+    assert_eq!(
+        read_blob(&t.path, "refs/heads/main", "data.bin")
+            .unwrap()
+            .len(),
+        6
+    );
 }
 
 #[test]
 fn merge_commit_layout() {
     let (t, oids) = sample();
-    let [a, b, c, _tt, m, _f] = oids[..] else { panic!() };
+    let [a, b, c, _tt, m, _f] = oids[..] else {
+        panic!()
+    };
     let g = graph(
         &t.path,
         &["refs/heads/main".into(), "refs/heads/feature".into()],
@@ -408,7 +452,10 @@ fn merge_commit_layout() {
 
     // Merge row must have two outgoing edges (one per parent).
     let mrow = &g.rows[ri_m];
-    assert!(mrow.edges.len() >= 2, "merge should fan out to both parents");
+    assert!(
+        mrow.edges.len() >= 2,
+        "merge should fan out to both parents"
+    );
     // B and C sit in different columns; A reconverges below both.
     assert_ne!(g.rows[ri_b].column, g.rows[ri_c].column);
     assert!(ri_a > ri_b && ri_a > ri_c);

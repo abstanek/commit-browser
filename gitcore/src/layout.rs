@@ -72,7 +72,10 @@ pub fn layout(commits: &[LayoutInput], continue_below: bool) -> (Vec<LayoutRow>,
             };
             let color = next_color;
             next_color += 1;
-            lanes[idx] = Some(Lane { expected: oid, color });
+            lanes[idx] = Some(Lane {
+                expected: oid,
+                color,
+            });
             born_here = Some(idx);
             (idx, color)
         };
@@ -91,14 +94,20 @@ pub fn layout(commits: &[LayoutInput], continue_below: bool) -> (Vec<LayoutRow>,
                     .map(|(_, origin)| *origin)
                     .unwrap_or(idx);
                 let to = if l.expected == oid { col } else { idx };
-                edges.push(Edge { from, to, color: l.color });
+                edges.push(Edge {
+                    from,
+                    to,
+                    color: l.color,
+                });
             }
             for (origin, lane_idx, ecolor) in pending_merges.drain(..) {
-                let converges = lanes[lane_idx]
-                    .as_ref()
-                    .is_some_and(|l| l.expected == oid);
+                let converges = lanes[lane_idx].as_ref().is_some_and(|l| l.expected == oid);
                 let to = if converges { col } else { lane_idx };
-                edges.push(Edge { from: origin, to, color: ecolor });
+                edges.push(Edge {
+                    from: origin,
+                    to,
+                    color: ecolor,
+                });
             }
             births.clear();
             rows[i - 1].edges = edges;
@@ -106,7 +115,11 @@ pub fn layout(commits: &[LayoutInput], continue_below: bool) -> (Vec<LayoutRow>,
             births.clear();
         }
 
-        rows.push(LayoutRow { column: col, color, edges: Vec::new() });
+        rows.push(LayoutRow {
+            column: col,
+            color,
+            edges: Vec::new(),
+        });
         width = width.max(lanes.len());
 
         // Update lane state for the rows below.
@@ -158,10 +171,18 @@ pub fn layout(commits: &[LayoutInput], continue_below: bool) -> (Vec<LayoutRow>,
                     .find(|(lane, _)| *lane == idx)
                     .map(|(_, origin)| *origin)
                     .unwrap_or(idx);
-                last.edges.push(Edge { from, to: idx, color: l.color });
+                last.edges.push(Edge {
+                    from,
+                    to: idx,
+                    color: l.color,
+                });
             }
             for (origin, lane_idx, ecolor) in pending_merges.drain(..) {
-                last.edges.push(Edge { from: origin, to: lane_idx, color: ecolor });
+                last.edges.push(Edge {
+                    from: origin,
+                    to: lane_idx,
+                    color: ecolor,
+                });
             }
         }
     }

@@ -40,7 +40,10 @@ fn get_graph(
 }
 
 #[tauri::command]
-fn get_commit_details(id: String, state: State<AppState>) -> Result<gitcore::CommitDetails, String> {
+fn get_commit_details(
+    id: String,
+    state: State<AppState>,
+) -> Result<gitcore::CommitDetails, String> {
     gitcore::commit_details(&current_repo(&state)?, &id)
 }
 
@@ -54,7 +57,11 @@ fn get_review(
 }
 
 #[tauri::command]
-fn list_tree(rev: String, path: String, state: State<AppState>) -> Result<gitcore::TreeResult, String> {
+fn list_tree(
+    rev: String,
+    path: String,
+    state: State<AppState>,
+) -> Result<gitcore::TreeResult, String> {
     gitcore::list_tree(&current_repo(&state)?, &rev, &path)
 }
 

@@ -176,7 +176,11 @@ pub fn open_repo(path: &str) -> Result<RepoInfo> {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| display.clone());
-    Ok(RepoInfo { git_dir, display_path: display, name })
+    Ok(RepoInfo {
+        git_dir,
+        display_path: display,
+        name,
+    })
 }
 
 pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
@@ -193,11 +197,15 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
             Ok(r) => r,
             Err(_) => continue,
         };
-        let Ok(full) = r.name().map(str::to_string) else { continue };
+        let Ok(full) = r.name().map(str::to_string) else {
+            continue;
+        };
         if full.ends_with("/HEAD") {
             continue; // e.g. refs/remotes/origin/HEAD
         }
-        let Ok(commit) = r.peel_to_commit() else { continue };
+        let Ok(commit) = r.peel_to_commit() else {
+            continue;
+        };
         let target = commit.id().to_string();
         let tip_time = commit.time().seconds();
         if let Some(short) = full.strip_prefix("refs/heads/") {
@@ -213,7 +221,11 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
             // since branch names may themselves contain slashes.
             let remote = remote_names
                 .iter()
-                .find(|rn| short.strip_prefix(rn.as_str()).is_some_and(|s| s.starts_with('/')))
+                .find(|rn| {
+                    short
+                        .strip_prefix(rn.as_str())
+                        .is_some_and(|s| s.starts_with('/'))
+                })
                 .cloned();
             remotes.push(BranchInfo {
                 name: short.to_string(),
@@ -233,14 +245,22 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
         .filter(|h| h.is_branch())
         .and_then(|h| h.shorthand().ok().map(str::to_string));
 
-    Ok(RefsResult { locals, remotes, head_branch })
+    Ok(RefsResult {
+        locals,
+        remotes,
+        head_branch,
+    })
 }
 
 fn ref_labels(repo: &Repository) -> HashMap<Oid, Vec<RefLabel>> {
     let mut map: HashMap<Oid, Vec<RefLabel>> = HashMap::new();
-    let Ok(refs) = repo.references() else { return map };
+    let Ok(refs) = repo.references() else {
+        return map;
+    };
     for r in refs.flatten() {
-        let Ok(full) = r.name().map(str::to_string) else { continue };
+        let Ok(full) = r.name().map(str::to_string) else {
+            continue;
+        };
         if full.ends_with("/HEAD") {
             continue;
         }
@@ -253,7 +273,9 @@ fn ref_labels(repo: &Repository) -> HashMap<Oid, Vec<RefLabel>> {
         } else {
             continue;
         };
-        let Ok(commit) = r.peel_to_commit() else { continue };
+        let Ok(commit) = r.peel_to_commit() else {
+            continue;
+        };
         map.entry(commit.id()).or_default().push(RefLabel {
             name: name.to_string(),
             kind: kind.to_string(),
@@ -273,11 +295,17 @@ pub fn graph(repo_path: &str, branches: &[String], limit: usize) -> Result<Graph
         .map(|c| c.id().to_string());
 
     if branches.is_empty() {
-        return Ok(GraphResult { rows: Vec::new(), width: 0, has_more: false, head_id });
+        return Ok(GraphResult {
+            rows: Vec::new(),
+            width: 0,
+            has_more: false,
+            head_id,
+        });
     }
 
     let mut walk = repo.revwalk().map_err(err)?;
-    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME).map_err(err)?;
+    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
+        .map_err(err)?;
     for b in branches {
         // Tolerate refs that vanished since the sidebar was populated.
         let _ = walk.push_ref(b);
@@ -293,7 +321,10 @@ pub fn graph(repo_path: &str, branches: &[String], limit: usize) -> Result<Graph
             break;
         }
         let commit = repo.find_commit(oid).map_err(err)?;
-        inputs.push(layout::LayoutInput { id: oid, parents: commit.parent_ids().collect() });
+        inputs.push(layout::LayoutInput {
+            id: oid,
+            parents: commit.parent_ids().collect(),
+        });
         commits.push(commit);
     }
 
@@ -321,7 +352,12 @@ pub fn graph(repo_path: &str, branches: &[String], limit: usize) -> Result<Graph
         })
         .collect();
 
-    Ok(GraphResult { rows, width, has_more, head_id })
+    Ok(GraphResult {
+        rows,
+        width,
+        has_more,
+        head_id,
+    })
 }
 
 pub fn commit_details(repo_path: &str, id: &str) -> Result<CommitDetails> {
@@ -403,7 +439,10 @@ fn diff_files(
             .or_else(|| delta.old_file().path())
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let old_path = delta.old_file().path().map(|p| p.to_string_lossy().into_owned());
+        let old_path = delta
+            .old_file()
+            .path()
+            .map(|p| p.to_string_lossy().into_owned());
         let old_path = match &old_path {
             Some(op) if *op != new_path => Some(op.clone()),
             _ => None,
@@ -459,7 +498,8 @@ pub fn review(repo_path: &str, base: &str, head: &str) -> Result<ReviewResult> {
     let merge_base = repo.merge_base(base_commit.id(), head_commit.id()).ok();
 
     let mut walk = repo.revwalk().map_err(err)?;
-    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME).map_err(err)?;
+    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
+        .map_err(err)?;
     walk.push(head_commit.id()).map_err(err)?;
     let _ = walk.hide(base_commit.id());
     let mut commits = Vec::new();
@@ -507,7 +547,11 @@ pub fn review(repo_path: &str, base: &str, head: &str) -> Result<ReviewResult> {
 
 /// The tree at `path` within the commit `rev` names, or the root tree when
 /// `path` is empty.
-fn tree_at<'r>(repo: &'r Repository, commit: &git2::Commit<'r>, path: &str) -> Result<git2::Tree<'r>> {
+fn tree_at<'r>(
+    repo: &'r Repository,
+    commit: &git2::Commit<'r>,
+    path: &str,
+) -> Result<git2::Tree<'r>> {
     let root = commit.tree().map_err(err)?;
     if path.is_empty() {
         return Ok(root);
@@ -549,7 +593,11 @@ pub fn list_tree(repo_path: &str, rev: &str, path: &str) -> Result<TreeResult> {
             None => 0,
         };
         entries.push(TreeEntry {
-            path: if path.is_empty() { name.clone() } else { format!("{path}/{name}") },
+            path: if path.is_empty() {
+                name.clone()
+            } else {
+                format!("{path}/{name}")
+            },
             name,
             kind: kind.to_string(),
             size,
@@ -557,7 +605,9 @@ pub fn list_tree(repo_path: &str, rev: &str, path: &str) -> Result<TreeResult> {
     }
     entries.sort_by(|a, b| {
         let dir = |k: &str| k != "dir";
-        dir(&a.kind).cmp(&dir(&b.kind)).then_with(|| a.name.cmp(&b.name))
+        dir(&a.kind)
+            .cmp(&dir(&b.kind))
+            .then_with(|| a.name.cmp(&b.name))
     });
 
     let id = commit.id().to_string();
@@ -569,7 +619,11 @@ pub fn list_tree(repo_path: &str, rev: &str, path: &str) -> Result<TreeResult> {
     })
 }
 
-fn blob_at<'r>(repo: &'r Repository, commit: &git2::Commit<'r>, path: &str) -> Result<git2::Blob<'r>> {
+fn blob_at<'r>(
+    repo: &'r Repository,
+    commit: &git2::Commit<'r>,
+    path: &str,
+) -> Result<git2::Blob<'r>> {
     commit
         .tree()
         .map_err(err)?
