@@ -136,13 +136,9 @@ export function wire(canEdit: boolean): void {
 
   el.add.addEventListener("click", () => {
     // Put the menu away without pulling focus back to the trigger: this action
-    // opens a window of its own, and focus belongs wherever that leads rather
-    // than on a button the reader has finished with.
+    // opens a window of its own, and focus belongs wherever that leads.
     close(false);
-    // And open it once the click is over and the menu is off screen, rather
-    // than from the middle of tearing it down. The empty-state button, which
-    // opens the same dialog from a standing start, has never had trouble.
-    setTimeout(addCb);
+    addCb();
   });
 
   // Keys are handled on the menu so they never reach the commit list, which
@@ -170,10 +166,12 @@ export function wire(canEdit: boolean): void {
   document.addEventListener("pointerdown", (e) => {
     if (isOpen() && !el.picker.contains(e.target as Node)) close(false);
   });
-  el.picker.addEventListener("focusout", () => {
-    // Focus moves between rows within the menu, so wait for it to land.
-    setTimeout(() => {
-      if (isOpen() && !el.picker.contains(document.activeElement)) close(false);
-    });
+  el.picker.addEventListener("focusout", (e) => {
+    // Where focus is going, which is known now and saves waiting for it to
+    // land. Nowhere at all is not the reader leaving: macOS does not focus a
+    // button when it is clicked, so every press inside the menu looks like
+    // that, and closing on it took the menu away before the click arrived.
+    const to = e.relatedTarget as Node | null;
+    if (to && !el.picker.contains(to)) close(false);
   });
 }
