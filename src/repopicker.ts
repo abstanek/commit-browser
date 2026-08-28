@@ -135,8 +135,14 @@ export function wire(canEdit: boolean): void {
   });
 
   el.add.addEventListener("click", () => {
-    close();
-    addCb();
+    // Put the menu away without pulling focus back to the trigger: this action
+    // opens a window of its own, and focus belongs wherever that leads rather
+    // than on a button the reader has finished with.
+    close(false);
+    // And open it once the click is over and the menu is off screen, rather
+    // than from the middle of tearing it down. The empty-state button, which
+    // opens the same dialog from a standing start, has never had trouble.
+    setTimeout(addCb);
   });
 
   // Keys are handled on the menu so they never reach the commit list, which
