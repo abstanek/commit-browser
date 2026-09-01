@@ -39,6 +39,12 @@ struct Args {
     #[arg(long, short)]
     repo: Vec<String>,
 
+    /// Directory of repositories to serve: every repository directly inside it,
+    /// and no deeper. Repeatable, and may be mixed with --repo. Several
+    /// worktrees of one repository count once.
+    #[arg(long)]
+    repo_dir: Vec<String>,
+
     /// Address to bind. Defaults to loopback; use 0.0.0.0 to expose the server
     /// on the network, which grants anyone who can reach it read access to
     /// every repository served.
@@ -282,21 +288,44 @@ async fn embedded(uri: Uri) -> Response {
     ([(header::CONTENT_TYPE, mime.as_ref())], file.contents()).into_response()
 }
 
-/// Open every repository named on the command line, in the order given. No
-/// name at all means the working directory, as it always has.
-fn open_all(paths: &[String]) -> Result<Vec<gitcore::RepoInfo>, String> {
-    let wanted: Vec<String> = if paths.is_empty() {
+/// Every repository the command line asks for: the ones named outright first,
+/// in the order given, then the contents of each scanned directory in name
+/// order. Asking for nothing at all means the working directory, as it always
+/// has.
+///
+/// One entry per repository. Two arguments can name the same one from
+/// different directories inside it, and a directory of worktrees is several
+/// checkouts of one repository rather than several repositories; both collapse
+/// to whichever was found first. A scan offers the checkout a repository was
+/// made in ahead of its worktrees, so that is the one a scan keeps - but a
+/// worktree named outright stays the one on offer, since it was asked for.
+fn open_all(paths: &[String], dirs: &[String]) -> Result<Vec<gitcore::RepoInfo>, String> {
+    let named: Vec<String> = if paths.is_empty() && dirs.is_empty() {
         vec![".".to_string()]
     } else {
         paths.to_vec()
     };
+
+    let mut found: Vec<gitcore::RepoInfo> = Vec::new();
+    for path in &named {
+        found.push(
+            gitcore::open_repo(path)
+                .map_err(|e| format!("cannot open repository at {path}: {e}"))?,
+        );
+    }
+    for dir in dirs {
+        // An unreadable directory is already an error; one holding nothing to
+        // browse is a mistake worth saying out loud rather than serving empty.
+        let scanned = gitcore::scan_repos(dir)?;
+        if scanned.is_empty() {
+            return Err(format!("no repositories directly inside {dir}"));
+        }
+        found.extend(scanned);
+    }
+
     let mut opened: Vec<gitcore::RepoInfo> = Vec::new();
-    for path in &wanted {
-        let info = gitcore::open_repo(path)
-            .map_err(|e| format!("cannot open repository at {path}: {e}"))?;
-        // Two arguments can name one repository from different directories
-        // inside it; keep the first and say nothing.
-        if !opened.iter().any(|r| r.git_dir == info.git_dir) {
+    for info in found {
+        if !opened.iter().any(|r| r.common_dir == info.common_dir) {
             opened.push(info);
         }
     }
@@ -322,7 +351,7 @@ fn api_router() -> Router<Arc<AppState>> {
 async fn main() -> ExitCode {
     let args = Args::parse();
 
-    let opened = match open_all(&args.repo) {
+    let opened = match open_all(&args.repo, &args.repo_dir) {
         Ok(opened) => opened,
         Err(e) => {
             eprintln!("{e}");

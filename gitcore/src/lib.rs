@@ -34,6 +34,11 @@ pub struct RepoInfo {
     /// Path shown to the user (workdir if present).
     pub display_path: String,
     pub name: String,
+    /// The git directory shared by every worktree of this repository, which is
+    /// what tells two checkouts of one repository from two repositories. The
+    /// UI has no use for it, so it stays on this side.
+    #[serde(skip)]
+    pub common_dir: String,
 }
 
 #[derive(Serialize, Debug)]
@@ -189,7 +194,11 @@ pub struct FileContent {
 }
 
 pub fn open_repo(path: &str) -> Result<RepoInfo> {
-    let repo = Repository::discover(path).map_err(err)?;
+    Ok(describe(&Repository::discover(path).map_err(err)?))
+}
+
+/// How a repository presents itself, given one that is already open.
+fn describe(repo: &Repository) -> RepoInfo {
     let git_dir = repo.path().to_string_lossy().into_owned();
     let display = repo
         .workdir()
@@ -201,11 +210,62 @@ pub fn open_repo(path: &str) -> Result<RepoInfo> {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| display.clone());
-    Ok(RepoInfo {
+    RepoInfo {
         git_dir,
         display_path: display,
         name,
-    })
+        common_dir: repo.commondir().to_string_lossy().into_owned(),
+    }
+}
+
+impl RepoInfo {
+    /// Whether this is a linked worktree rather than the checkout the
+    /// repository was made in: a worktree has a git directory of its own,
+    /// under the shared one.
+    pub fn is_worktree(&self) -> bool {
+        self.git_dir != self.common_dir
+    }
+}
+
+/// The repositories directly inside `dir`, in name order.
+///
+/// One level down only: a subdirectory that is not itself a checkout is passed
+/// over rather than searched, and never resolves to a repository above it the
+/// way opening a path otherwise would. Hidden directories are left alone, so a
+/// directory that is itself a checkout does not offer its own .git. Worktrees are returned as they are
+/// found; it is for the caller to decide that two of them are one repository,
+/// which `common_dir` is what to compare.
+pub fn scan_repos(dir: &str) -> Result<Vec<RepoInfo>> {
+    let entries = std::fs::read_dir(dir).map_err(|e| format!("cannot read {dir}: {e}"))?;
+    let mut paths: Vec<std::path::PathBuf> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        // Nothing hidden. Scanning a directory that is itself a checkout would
+        // otherwise offer its own .git as a repository sitting inside it.
+        .filter(|p| {
+            !p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with('.'))
+        })
+        .collect();
+    paths.sort();
+    let mut found: Vec<RepoInfo> = paths
+        .iter()
+        // Opened rather than discovered, so a subdirectory of a repository is
+        // not mistaken for the repository containing it.
+        .filter_map(|p| Repository::open(p).ok())
+        .map(|repo| describe(&repo))
+        .collect();
+    // Checkouts before worktrees, so a caller keeping the first of each
+    // repository keeps the one it was made in whatever its worktrees are
+    // called. Name order otherwise.
+    found.sort_by(|a, b| {
+        a.is_worktree()
+            .cmp(&b.is_worktree())
+            .then_with(|| a.display_path.cmp(&b.display_path))
+    });
+    Ok(found)
 }
 
 pub fn list_refs(repo_path: &str) -> Result<RefsResult> {

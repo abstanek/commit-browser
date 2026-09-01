@@ -91,11 +91,18 @@ cargo build --release -p commit-browser-server
 ./target/release/commit-browser-server --repo /path/to/repo
 ```
 
-Repeat `--repo` to serve several at once:
+Repeat `--repo` to serve several at once, or hand it a directory they sit in:
 
 ```
 ./target/release/commit-browser-server --repo ~/src/one --repo ~/src/two
+./target/release/commit-browser-server --repo-dir ~/src
 ```
+
+`--repo-dir` takes every repository directly inside that directory and no
+deeper, so a workspace can be served without naming its contents. Worktrees are
+understood: several checkouts of one repository appear once, as the checkout it
+was made in. Both flags repeat and can be mixed; a repository reached more than
+one way is still one entry.
 
 The list is fixed by that command line: the page offers no way to add to it,
 which is what keeps the server to the repositories it was pointed at.
@@ -123,8 +130,9 @@ There is no authentication and no way to reach a repository the server was not
 given; `--host 0.0.0.0` gives anyone who can reach the port read access to
 every repository served, including their full history and diffs.
 
-Options: `--repo` (repeatable), `--host`, `--port`, and `--static-dir` to serve
-the frontend from a directory instead of the copy compiled into the binary.
+Options: `--repo` and `--repo-dir` (both repeatable), `--host`, `--port`, and
+`--static-dir` to serve the frontend from a directory instead of the copy
+compiled into the binary.
 
 ### Developing the web variant
 

@@ -57,7 +57,7 @@ async fn get(state: &Arc<AppState>, uri: &str) -> (StatusCode, serde_json::Value
 fn state_of(fixtures: &[&Fixture]) -> Arc<AppState> {
     let paths: Vec<String> = fixtures.iter().map(|f| f.path()).collect();
     Arc::new(AppState {
-        repos: open_all(&paths).unwrap(),
+        repos: open_all(&paths, &[]).unwrap(),
     })
 }
 
@@ -65,7 +65,7 @@ fn state_of(fixtures: &[&Fixture]) -> Arc<AppState> {
 fn opens_each_repository_in_the_order_given() {
     let a = Fixture::new("a.txt");
     let b = Fixture::new("b.txt");
-    let repos = open_all(&[a.path(), b.path()]).unwrap();
+    let repos = open_all(&[a.path(), b.path()], &[]).unwrap();
     assert_eq!(repos.len(), 2);
     assert_eq!(repos[0].display_path, a.display_path());
     assert_eq!(repos[1].display_path, b.display_path());
@@ -76,7 +76,7 @@ fn two_names_for_one_repository_collapse() {
     let a = Fixture::new("a.txt");
     // The working directory and the .git inside it are the same repository.
     let inside = format!("{}/.git", a.path());
-    let repos = open_all(&[a.path(), inside]).unwrap();
+    let repos = open_all(&[a.path(), inside], &[]).unwrap();
     assert_eq!(repos.len(), 1, "one repository named twice is still one");
 }
 
@@ -84,7 +84,7 @@ fn two_names_for_one_repository_collapse() {
 fn no_repository_named_means_the_working_directory() {
     // Asserted as an equivalence rather than a count, so the test does not
     // depend on the tests themselves being run from inside a checkout.
-    match (open_all(&[]), open_all(&[".".to_string()])) {
+    match (open_all(&[], &[]), open_all(&[".".to_string()], &[])) {
         (Ok(none), Ok(dot)) => assert_eq!(
             none.iter().map(|r| &r.git_dir).collect::<Vec<_>>(),
             dot.iter().map(|r| &r.git_dir).collect::<Vec<_>>(),
@@ -97,7 +97,7 @@ fn no_repository_named_means_the_working_directory() {
 #[test]
 fn a_path_that_is_not_a_repository_is_an_error() {
     let dir = TempDir::new().unwrap();
-    let err = open_all(&[dir.path().to_string_lossy().into_owned()]).unwrap_err();
+    let err = open_all(&[dir.path().to_string_lossy().into_owned()], &[]).unwrap_err();
     assert!(err.contains("cannot open repository at"), "{err}");
 }
 
