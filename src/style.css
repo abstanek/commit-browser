@@ -1002,6 +1002,10 @@ body {
   flex: none;
   display: flex;
   align-items: center;
+  /* Two lines beats losing the counts altogether: in a narrow window the
+     commit picker drops below the summary rather than crowding it out. */
+  flex-wrap: wrap;
+  row-gap: 6px;
   gap: 12px;
   padding: 6px 12px;
   background: var(--bg-alt);
@@ -1020,6 +1024,21 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* In a narrow window the branch names are what gives way: a shortened name is
+   still recognisable, where a shortened count is not. Chips do not shrink by
+   default, so without this they overflow their own box and print over the
+   counts beside them. */
+.review-refs .chip {
+  flex: 0 1 auto;
+  /* Enough to stay recognisable as a branch rather than disappearing. */
+  min-width: 3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .review-refs .arrow {
@@ -1027,6 +1046,7 @@ body {
 }
 
 .review-stat {
+  flex: none;
   font-size: 0.92rem;
   white-space: nowrap;
 }
