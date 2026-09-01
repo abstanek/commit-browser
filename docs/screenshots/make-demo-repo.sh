@@ -35,14 +35,14 @@ cat > docs/bus.md <<'EOF'
 # The augmentation bus
 
 Every implant is a node on a shared bus. Nodes announce themselves at power-on
-and are polled on a fixed cadence; a node that misses three polls is dropped and
+and are polled on a fixed cadence; a node that stops answering is dropped and
 its limb falls back to passive control.
 EOF
 git add -A; commit "${SARIF[@]}" "2026-04-02T09:12:00+00:00" "chore: start the series-3 firmware tree"
 
 cat > src/aug/bus.rs <<'EOF'
 //! The augmentation bus: implants announce themselves at power-on and are
-//! polled on a fixed cadence. A node that misses three polls is dropped and its
+//! polled on a fixed cadence. A node that stops answering is dropped and its
 //! limb falls back to passive control, which is always safe if not useful.
 
 use std::time::Duration;
@@ -345,5 +345,29 @@ git add -A; commit "${MILLER[@]}" "2026-08-18T11:52:00+00:00" "feat(diagnostics)
 
 A dropped node says nothing about when it went, which is the first thing
 the clinic asks."
+
+sed -i 's/pub const POLL_INTERVAL: Duration = Duration::from_millis(20);/pub const POLL_INTERVAL: Duration = Duration::from_millis(25);/' src/aug/bus.rs
+sed -i 's/pub const MISSED_POLL_LIMIT: u8 = 4;/pub const MISSED_POLL_LIMIT: u8 = 6;/' src/aug/bus.rs
+sed -i 's/if limbs.iter().any(|l| \*l == NodeState::Dropped) {/if limbs.iter().any(NodeState::is_dropped) {/' src/aug/typhoon.rs
+sed -i 's/let dropped = nodes.iter().filter(|n| n.state == NodeState::Dropped).count();/let dropped = nodes.iter().filter(|n| n.state.is_dropped()).count();/' src/aug/diagnostics.rs
+cat >> src/aug/bus.rs <<'EOF'
+
+impl NodeState {
+    /// Whether the node has stopped answering for good.
+    pub fn is_dropped(&self) -> bool {
+        matches!(self, NodeState::Dropped)
+    }
+}
+EOF
+sed -i 's/its limb falls back to passive control./its limb falls back to passive control. The poll cadence is deliberately slow:\nthe bus is shared, and a limb that answers late is not a limb that has failed./' docs/bus.md
+git add -A; commit "${JENSEN[@]}" "2026-08-25T09:18:00+00:00" "refactor(bus): ask a node whether it has dropped rather than matching it
+
+Three places compared against NodeState::Dropped by hand, which is a
+detail of the enum leaking into everything that reads one. Give the state
+the question instead.
+
+The cadence goes out to 25ms and the limit to six polls while the shape
+of this is being changed: the bus is shared, and answering late is not
+the same as having failed."
 
 git checkout -q main
