@@ -87,26 +87,21 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist-artifacts
+          out="dist-artifacts/commit-browser-server-${TAG}-${{ matrix.name }}"
           case "${{ matrix.name }}" in
             linux-x86_64)
-              cp target/x86_64-unknown-linux-musl/release/commit-browser-server .
-              strip commit-browser-server
-              tar czf "dist-artifacts/commit-browser-server-${TAG}-${{ matrix.name }}.tar.gz" \
-                commit-browser-server README.md
+              cp target/x86_64-unknown-linux-musl/release/commit-browser-server "$out"
+              strip "$out"
               ;;
             macos-universal)
               # One binary that runs on both Apple silicon and Intel.
-              lipo -create -output commit-browser-server \
+              lipo -create -output "$out" \
                 target/x86_64-apple-darwin/release/commit-browser-server \
                 target/aarch64-apple-darwin/release/commit-browser-server
-              strip commit-browser-server
-              tar czf "dist-artifacts/commit-browser-server-${TAG}-${{ matrix.name }}.tar.gz" \
-                commit-browser-server README.md
+              strip "$out"
               ;;
             windows-x86_64)
-              cp target/x86_64-pc-windows-msvc/release/commit-browser-server.exe .
-              7z a "dist-artifacts/commit-browser-server-${TAG}-${{ matrix.name }}.zip" \
-                commit-browser-server.exe README.md
+              cp target/x86_64-pc-windows-msvc/release/commit-browser-server.exe "$out.exe"
               ;;
           esac
           ls -l dist-artifacts
@@ -191,21 +186,20 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist-artifacts
+          out="dist-artifacts/commit-browser-app-${TAG}-${{ matrix.name }}"
           case "${{ matrix.name }}" in
             linux-x86_64)
-              cp target/release/bundle/appimage/*.AppImage \
-                "dist-artifacts/commit-browser-${TAG}-${{ matrix.name }}.AppImage"
+              cp target/release/bundle/appimage/*.AppImage "$out.AppImage"
               ;;
             macos-universal)
-              # Zip rather than ship the .app raw, so the bundle survives download.
+              # The only one that has to be an archive: a .app is a directory,
+              # and nothing else survives the trip as a single file.
               ditto -c -k --keepParent \
                 "target/universal-apple-darwin/release/bundle/macos/Commit Browser.app" \
-                "dist-artifacts/commit-browser-${TAG}-${{ matrix.name }}.zip"
+                "$out.zip"
               ;;
             windows-x86_64)
-              cp target/release/commit-browser.exe .
-              7z a "dist-artifacts/commit-browser-${TAG}-${{ matrix.name }}.zip" \
-                commit-browser.exe README.md
+              cp target/release/commit-browser.exe "$out.exe"
               ;;
           esac
           ls -l dist-artifacts

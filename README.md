@@ -51,7 +51,13 @@ The two differ only in `src/backend-{tauri,web}.ts`, selected by Vite's `--mode`
 ## Downloads
 
 Every release carries prebuilt artifacts for Linux, macOS and Windows, two per
-platform: the desktop app and the web server.
+platform: `commit-browser-app-*` for the desktop app and
+`commit-browser-server-*` for the web server.
+
+Each is the thing itself rather than an archive around it. The exception is the
+macOS app, which is a `.app` bundle and therefore a directory, so it travels as
+a zip. Downloads do not keep their permissions, so on Linux and macOS the file
+needs `chmod +x` before it will run.
 
 The web server is a single file with the frontend compiled into it, so there is
 nothing to install beside it; the Linux build is statically linked and runs on
