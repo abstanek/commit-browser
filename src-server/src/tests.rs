@@ -203,3 +203,171 @@ async fn the_graph_reads_the_repository_it_names() {
     let (_, from_a) = get(&state, "/api/graph?branch=refs/heads/master&limit=10").await;
     assert_ne!(body["rows"][0]["id"], from_a["rows"][0]["id"]);
 }
+
+/// A directory of repositories, as --repo-dir expects to find one.
+struct Workspace {
+    dir: TempDir,
+}
+
+impl Workspace {
+    fn new() -> Self {
+        Workspace {
+            dir: TempDir::new().unwrap(),
+        }
+    }
+
+    fn path(&self) -> String {
+        self.dir.path().to_string_lossy().into_owned()
+    }
+
+    fn at(&self, name: &str) -> String {
+        self.dir.path().join(name).to_string_lossy().into_owned()
+    }
+
+    /// A repository with one commit, so it has a HEAD to add worktrees from.
+    fn repo(&self, name: &str) -> String {
+        let path = self.dir.path().join(name);
+        let repo = Repository::init(&path).unwrap();
+        let sig = Signature::new("Test", "test@example.com", &Time::new(1_700_000_000, 0)).unwrap();
+        let tree = repo
+            .find_tree(repo.treebuilder(None).unwrap().write().unwrap())
+            .unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "only commit", &tree, &[])
+            .unwrap();
+        path.to_string_lossy().into_owned()
+    }
+
+    /// A linked worktree of `name`, checked out beside it under `as_name`.
+    fn worktree(&self, name: &str, as_name: &str) {
+        let repo = Repository::open(self.dir.path().join(name)).unwrap();
+        repo.worktree(as_name, &self.dir.path().join(as_name), None)
+            .unwrap();
+    }
+
+    /// A directory that is not a repository at all.
+    fn plain(&self, name: &str) {
+        std::fs::create_dir_all(self.dir.path().join(name)).unwrap();
+    }
+}
+
+fn names(repos: &[gitcore::RepoInfo]) -> Vec<String> {
+    repos.iter().map(|r| r.name.clone()).collect()
+}
+
+#[test]
+fn a_directory_offers_the_repositories_inside_it() {
+    let w = Workspace::new();
+    w.repo("beta");
+    w.repo("alpha");
+    w.plain("not-a-repo");
+    let repos = open_all(&[], &[w.path()]).unwrap();
+    assert_eq!(
+        names(&repos),
+        ["alpha", "beta"],
+        "in name order, and nothing else"
+    );
+}
+
+#[test]
+fn the_scan_does_not_go_deeper_than_one_level() {
+    let w = Workspace::new();
+    w.plain("nested");
+    Repository::init(w.dir.path().join("nested/inner")).unwrap();
+    let err = open_all(&[], &[w.path()]).unwrap_err();
+    assert!(err.contains("no repositories directly inside"), "{err}");
+}
+
+/// Discovery walks up, so a plain subdirectory of a repository would resolve to
+/// that repository and every one of them would look like a repository of its
+/// own. The scan opens instead, which does not.
+#[test]
+fn a_subdirectory_is_not_mistaken_for_the_repository_above_it() {
+    let w = Workspace::new();
+    let outer = Repository::init(w.dir.path()).unwrap();
+    let sig = Signature::new("Test", "test@example.com", &Time::new(1_700_000_000, 0)).unwrap();
+    let tree = outer
+        .find_tree(outer.treebuilder(None).unwrap().write().unwrap())
+        .unwrap();
+    outer
+        .commit(Some("HEAD"), &sig, &sig, "only commit", &tree, &[])
+        .unwrap();
+    w.plain("src");
+    w.plain("docs");
+    let err = open_all(&[], &[w.path()]).unwrap_err();
+    assert!(err.contains("no repositories directly inside"), "{err}");
+}
+
+#[test]
+fn worktrees_of_one_repository_are_one_entry() {
+    let w = Workspace::new();
+    w.repo("alpha");
+    w.repo("beta");
+    w.worktree("alpha", "alpha-feature");
+    w.worktree("alpha", "alpha-hotfix");
+    let repos = open_all(&[], &[w.path()]).unwrap();
+    assert_eq!(names(&repos), ["alpha", "beta"]);
+}
+
+/// Which checkout is met first would otherwise depend on what the worktrees
+/// happen to be called, so the one the repository was made in is preferred.
+#[test]
+fn a_scan_keeps_the_checkout_the_repository_was_made_in() {
+    let w = Workspace::new();
+    w.repo("zulu");
+    w.worktree("zulu", "aaa-sorts-first");
+    let repos = open_all(&[], &[w.path()]).unwrap();
+    assert_eq!(names(&repos), ["zulu"]);
+    assert!(!repos[0].is_worktree());
+}
+
+#[test]
+fn a_worktree_named_outright_is_the_one_served() {
+    let w = Workspace::new();
+    w.repo("zulu");
+    w.worktree("zulu", "aaa-sorts-first");
+    // Asked for by name, so it stays, and the scan adds nothing further.
+    let repos = open_all(&[w.at("aaa-sorts-first")], &[w.path()]).unwrap();
+    assert_eq!(names(&repos), ["aaa-sorts-first"]);
+    assert!(repos[0].is_worktree());
+}
+
+#[test]
+fn a_repository_reached_both_ways_is_one_entry() {
+    let w = Workspace::new();
+    let alpha = w.repo("alpha");
+    w.repo("beta");
+    let repos = open_all(&[alpha], &[w.path()]).unwrap();
+    assert_eq!(names(&repos), ["alpha", "beta"]);
+}
+
+#[test]
+fn directories_are_scanned_in_the_order_they_are_given() {
+    let one = Workspace::new();
+    one.repo("alpha");
+    let two = Workspace::new();
+    two.repo("beta");
+    let repos = open_all(&[], &[two.path(), one.path()]).unwrap();
+    assert_eq!(names(&repos), ["beta", "alpha"]);
+}
+
+#[test]
+fn a_directory_that_cannot_be_read_is_an_error() {
+    let err = open_all(&[], &["/no/such/directory".to_string()]).unwrap_err();
+    assert!(err.contains("cannot read"), "{err}");
+}
+
+#[tokio::test]
+async fn a_scanned_repository_can_be_read_through_the_api() {
+    let w = Workspace::new();
+    w.repo("alpha");
+    let state = Arc::new(AppState {
+        repos: open_all(&[], &[w.path()]).unwrap(),
+    });
+    let uri = format!("/api/refs?repo={}", state.repos[0].display_path);
+    let (status, body) = get(&state, &uri).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body["head_branch"].is_string(),
+        "a scanned repository reads like any other: {body}"
+    );
+}
