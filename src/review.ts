@@ -49,6 +49,7 @@ const rs: ReviewState = {
 const el = {
   root: $("review"),
   summary: $("review-summary"),
+  nav: $("review-nav"),
   commitSelect: $<HTMLSelectElement>("commit-select"),
   prev: $<HTMLButtonElement>("commit-prev"),
   next: $<HTMLButtonElement>("commit-next"),
@@ -210,8 +211,13 @@ function renderCommitSelect(): void {
   const r = rs.result;
   if (!r) {
     el.commitSelect.innerHTML = "";
+    el.nav.hidden = true;
     return;
   }
+  // With one commit there is nothing to step between, and the whole branch and
+  // that commit are the same diff, so the picker would offer a choice that
+  // makes no difference.
+  el.nav.hidden = r.commits.length <= 1;
   // Oldest first, unlike the graph: a branch is reviewed in the order it was
   // written, so stepping forward moves to the newer commit.
   const opts = [
@@ -347,9 +353,12 @@ export async function load(
     render();
     return;
   }
-  // A commit asked for by the URL, if this comparison still contains it.
+  // A branch of one commit shows that commit rather than "all changes": the
+  // two are the same diff, and the commit brings its message with it.
+  const only = rs.result.commits.length === 1 ? rs.result.commits[0].id : null;
+  // Otherwise, a commit asked for by the URL if this comparison still has it.
   const wanted =
-    showing && rs.result.commits.some((c) => c.id === showing) ? showing : ALL;
+    only ?? (showing && rs.result.commits.some((c) => c.id === showing) ? showing : ALL);
   await showCommit(wanted);
 }
 
