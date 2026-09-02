@@ -748,8 +748,17 @@ function renderDetails(): void {
   const chips = d.refs
     .map((l) => `<span class="chip ${l.kind}">${escapeHtml(l.name)}</span>`)
     .join("");
+  // A parent's summary, when the graph on screen happens to hold it: a short id
+  // alone says nothing about what the commit was.
+  const loaded = new Map((state.graph?.rows ?? []).map((r) => [r.id, r]));
   const parents = d.parents
-    .map((p) => `<a href="#" class="parent-link" data-id="${p}">${p.slice(0, 7)}</a>`)
+    .map((p) => {
+      const row = loaded.get(p);
+      const title = row
+        ? ` title="${escapeHtml(`${row.summary}\n${row.author}, ${formatDate(row.time)}`)}"`
+        : "";
+      return `<a href="#" class="parent-link" data-id="${p}"${title}>${p.slice(0, 7)}</a>`;
+    })
     .join(", ");
   el.detailMeta.innerHTML =
     `<div class="detail-row1"><span class="sha">${d.id}</span>${chips}</div>` +
