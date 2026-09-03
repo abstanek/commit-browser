@@ -281,6 +281,8 @@ function renderMessage(): void {
     // Expanded, the body below already opens with the summary.
     (open ? "" : `<span class="msg">${escapeHtml(c.summary)}</span>`) +
     `<span class="dim">${escapeHtml(c.author)}, ${formatDate(c.time)}</span>` +
+    `<button class="linkbtn in-graph" title="Show this commit in the graph, with this branch and its target drawn">` +
+    `in graph</button>` +
     `</div>` +
     (open ? `<pre class="message-body">${escapeHtml(full)}</pre>` : "");
 }
@@ -403,6 +405,13 @@ function step(delta: number): void {
   void showCommit(el.commitSelect.options[i].value).then(navigated);
 }
 
+/// Fires when the reader asks to see the commit on screen in the graph.
+export function onShowInGraph(cb: (id: string) => void): void {
+  showInGraph = cb;
+}
+
+let showInGraph: (id: string) => void = () => {};
+
 /// The files view opens what the diff is showing: one commit's own version of
 /// the file, or the branch tip when the whole branch is in view.
 export function onOpenFile(cb: (rev: string, path: string) => void): void {
@@ -414,6 +423,10 @@ export function onOpenFile(cb: (rev: string, path: string) => void): void {
 
 export function wire(): void {
   el.message.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).closest(".in-graph")) {
+      if (rs.showing !== ALL) showInGraph(rs.showing);
+      return;
+    }
     if (!(ev.target as HTMLElement).closest(".msg-toggle")) return;
     rs.expanded = !rs.expanded;
     localStorage.setItem("reviewMessageExpanded", rs.expanded ? "1" : "0");

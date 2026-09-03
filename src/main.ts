@@ -477,6 +477,23 @@ async function loadFiles(): Promise<void> {
   syncUrl(true);
 }
 
+/// Follow a commit out of the review and into the graph.
+///
+/// The commit is on the branch under review, so drawing that branch is what
+/// puts it on screen; its merge target comes too, since a branch on its own is
+/// a strand with nothing to have diverged from. Both are added to whatever the
+/// reader already had showing rather than replacing it.
+async function openInGraph(id: string): Promise<void> {
+  for (const ref of [state.head, state.base]) {
+    if (ref) state.enabled.add(ref);
+  }
+  persistEnabled();
+  setMode("graph");
+  await refreshGraph();
+  // Replaces the entry setMode just recorded, so the move is one step back.
+  await jumpToCommit(id, true);
+}
+
 /// Follow a diff's file into the files view, at the revision it was read from.
 function openInFiles(rev: string, path: string): void {
   pendingFile = path;
@@ -716,7 +733,7 @@ async function selectCommit(
 
 /// Select a commit that may lie beyond the currently loaded page: keep
 /// extending the walk until its row exists, then select and scroll to it.
-async function jumpToCommit(id: string): Promise<void> {
+async function jumpToCommit(id: string, replaceUrl = false): Promise<void> {
   let guard = 0;
   while (
     state.graph &&
@@ -727,7 +744,7 @@ async function jumpToCommit(id: string): Promise<void> {
     state.limit += PAGE;
     await refreshGraph();
   }
-  await selectCommit(id, true);
+  await selectCommit(id, true, replaceUrl);
 }
 
 // -------------------------------------------------------------- details pane
@@ -959,6 +976,7 @@ function wire(): void {
   el.modeFiles.addEventListener("click", () => setMode("files"));
   review.wire();
   review.onOpenFile(openInFiles);
+  review.onShowInGraph((id) => void openInGraph(id));
   detailPane.onOpenFile((path) => {
     if (state.selectedId) openInFiles(state.selectedId, path);
   });
