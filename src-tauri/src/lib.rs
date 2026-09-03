@@ -33,6 +33,11 @@ fn get_commit_details(repo: String, id: String) -> Result<gitcore::CommitDetails
 }
 
 #[tauri::command]
+fn get_commit_meta(repo: String, id: String) -> Result<gitcore::CommitMeta, String> {
+    gitcore::commit_meta(&git_dir(&repo)?, &id)
+}
+
+#[tauri::command]
 fn get_review(repo: String, base: String, head: String) -> Result<gitcore::ReviewResult, String> {
     gitcore::review(&git_dir(&repo)?, &base, &head)
 }
@@ -60,6 +65,7 @@ pub fn run() {
             list_refs,
             get_graph,
             get_commit_details,
+            get_commit_meta,
             get_review,
             list_tree,
             read_file,

@@ -242,14 +242,14 @@ fn details_diff() {
     assert_eq!(file.status, "modified");
     assert_eq!(file.additions, 1);
     assert!(file.patch.contains("+b"));
-    assert!(!d.parents.is_empty());
+    assert!(!d.meta.parents.is_empty());
 }
 
 #[test]
 fn details_root_commit() {
     let (t, oids) = sample();
     let d = commit_details(&t.path, &oids[0].to_string()).unwrap();
-    assert!(d.parents.is_empty());
+    assert!(d.meta.parents.is_empty());
     assert_eq!(d.files.len(), 1);
     assert_eq!(d.files[0].status, "added");
 }

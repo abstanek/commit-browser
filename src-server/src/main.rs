@@ -262,6 +262,16 @@ async fn commit(
     blocking(move || gitcore::commit_details(&dir, &id)).await
 }
 
+/// One commit without its diff, which is all a passing look at it needs.
+async fn commit_meta(
+    State(s): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(p): Query<RepoParams>,
+) -> Result<Json<gitcore::CommitMeta>, ApiError> {
+    let dir = s.git_dir(p.repo.as_deref())?;
+    blocking(move || gitcore::commit_meta(&dir, &id)).await
+}
+
 /// Looks a path up in the compiled-in frontend, tolerating the leading slash a
 /// request path carries.
 fn asset(path: &str) -> Option<&'static include_dir::File<'static>> {
@@ -345,6 +355,7 @@ fn api_router() -> Router<Arc<AppState>> {
         .route("/api/image", get(image))
         .route("/api/raw", get(raw))
         .route("/api/commits/{id}", get(commit))
+        .route("/api/commits/{id}/meta", get(commit_meta))
 }
 
 #[tokio::main]

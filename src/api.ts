@@ -65,6 +65,22 @@ export interface FileDiff {
   truncated: boolean;
 }
 
+/// A commit without its diff: who wrote it, when, and what they said.
+export interface CommitMeta {
+  id: string;
+  short_id: string;
+  summary: string;
+  message: string;
+  author_name: string;
+  author_email: string;
+  author_time: number;
+  committer_name: string;
+  committer_email: string;
+  commit_time: number;
+  parents: string[];
+  refs: RefLabel[];
+}
+
 export interface CommitDetails {
   id: string;
   short_id: string;
@@ -148,6 +164,8 @@ export interface Backend {
   listRefs(repo: string): Promise<RefsResult>;
   getGraph(repo: string, branches: string[], limit: number): Promise<GraphResult>;
   getCommitDetails(repo: string, id: string): Promise<CommitDetails>;
+  /// The same without the diff, for a passing look at a commit.
+  getCommitMeta(repo: string, id: string): Promise<CommitMeta>;
   /// Diff `head` against the commit it would merge into, pull-request style.
   getReview(repo: string, base: string, head: string): Promise<ReviewResult>;
   /// One directory of the tree at `rev`; empty `path` is the root.

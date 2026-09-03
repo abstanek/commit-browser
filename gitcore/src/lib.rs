@@ -107,7 +107,7 @@ pub struct FileDiff {
 }
 
 #[derive(Serialize, Debug)]
-pub struct CommitDetails {
+pub struct CommitMeta {
     pub id: String,
     pub short_id: String,
     pub summary: String,
@@ -120,6 +120,14 @@ pub struct CommitDetails {
     pub commit_time: i64,
     pub parents: Vec<String>,
     pub refs: Vec<RefLabel>,
+}
+
+/// Everything about a commit, its diff included. The metadata is flattened, so
+/// this is one flat object on the wire exactly as it always was.
+#[derive(Serialize, Debug)]
+pub struct CommitDetails {
+    #[serde(flatten)]
+    pub meta: CommitMeta,
     pub files: Vec<FileDiff>,
 }
 
@@ -445,22 +453,12 @@ pub fn graph(repo_path: &str, branches: &[String], limit: usize) -> Result<Graph
     })
 }
 
-pub fn commit_details(repo_path: &str, id: &str) -> Result<CommitDetails> {
-    let repo = Repository::open(repo_path).map_err(err)?;
-    let oid = Oid::from_str(id).map_err(err)?;
-    let commit = repo.find_commit(oid).map_err(err)?;
-
-    let new_tree = commit.tree().map_err(err)?;
-    let old_tree = match commit.parent(0) {
-        Ok(p) => Some(p.tree().map_err(err)?),
-        Err(_) => None,
-    };
-    let files = diff_files(&repo, old_tree.as_ref(), Some(&new_tree))?;
-
+/// Who wrote a commit and what they said, without reading its diff.
+fn meta_of(repo: &Repository, commit: &git2::Commit<'_>) -> CommitMeta {
     let author = commit.author();
     let committer = commit.committer();
-    let labels = ref_labels(&repo);
-    Ok(CommitDetails {
+    let labels = ref_labels(repo);
+    CommitMeta {
         id: commit.id().to_string(),
         short_id: commit.id().to_string()[..7].to_string(),
         summary: commit.summary().ok().flatten().unwrap_or("").to_string(),
@@ -473,6 +471,33 @@ pub fn commit_details(repo_path: &str, id: &str) -> Result<CommitDetails> {
         commit_time: commit.time().seconds(),
         parents: commit.parent_ids().map(|p| p.to_string()).collect(),
         refs: labels.get(&commit.id()).cloned().unwrap_or_default(),
+    }
+}
+
+/// One commit's metadata on its own. The diff of a commit can run to megabytes,
+/// which is far too much to ask for when all that is wanted is who wrote it and
+/// what they said.
+pub fn commit_meta(repo_path: &str, id: &str) -> Result<CommitMeta> {
+    let repo = Repository::open(repo_path).map_err(err)?;
+    let oid = Oid::from_str(id).map_err(err)?;
+    let commit = repo.find_commit(oid).map_err(err)?;
+    Ok(meta_of(&repo, &commit))
+}
+
+pub fn commit_details(repo_path: &str, id: &str) -> Result<CommitDetails> {
+    let repo = Repository::open(repo_path).map_err(err)?;
+    let oid = Oid::from_str(id).map_err(err)?;
+    let commit = repo.find_commit(oid).map_err(err)?;
+
+    let new_tree = commit.tree().map_err(err)?;
+    let old_tree = match commit.parent(0) {
+        Ok(p) => Some(p.tree().map_err(err)?),
+        Err(_) => None,
+    };
+    let files = diff_files(&repo, old_tree.as_ref(), Some(&new_tree))?;
+
+    Ok(CommitDetails {
+        meta: meta_of(&repo, &commit),
         files,
     })
 }

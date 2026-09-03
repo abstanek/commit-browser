@@ -1,6 +1,7 @@
 import type {
   Backend,
   CommitDetails,
+  CommitMeta,
   FileContent,
   GraphResult,
   ImageContent,
@@ -38,6 +39,10 @@ export const backend: Backend = {
   getCommitDetails: (repo, id) =>
     get<CommitDetails>(
       `commits/${encodeURIComponent(id)}?${new URLSearchParams({ repo })}`,
+    ),
+  getCommitMeta: (repo, id) =>
+    get<CommitMeta>(
+      `commits/${encodeURIComponent(id)}/meta?${new URLSearchParams({ repo })}`,
     ),
   getReview: (repo, base, head) =>
     get<ReviewResult>(`review?${new URLSearchParams({ repo, base, head })}`),
