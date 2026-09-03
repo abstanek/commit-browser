@@ -1432,3 +1432,31 @@ body {
   font-size: 0.85rem;
   color: var(--text-dim);
 }
+
+/* The card describing a commit behind a reference. It holds what the details
+   pane holds, so it borrows those rules and only says where it sits. */
+#commit-card {
+  position: fixed;
+  z-index: 60;
+  /* Wide enough for a message written to the usual 72 columns to arrive
+     unwrapped, since the pane it is standing in for is wider than this. */
+  width: 42rem;
+  max-width: calc(100vw - 16px);
+  padding: 8px 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  /* The point of it: what is in here can be read at length and taken away. */
+  user-select: text;
+}
+
+#commit-card[hidden] {
+  display: none;
+}
+
+#commit-card .detail-message {
+  max-height: 14rem;
+  overflow: auto;
+  margin-bottom: 0;
+}

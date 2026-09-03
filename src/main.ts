@@ -3,6 +3,7 @@ import type { BranchInfo, CommitDetails, GraphResult, RefsResult, RepoInfo } fro
 import { fileLabel, statsHtml, STATUS_LETTER } from "./diff";
 import { createDiffPane } from "./diffpane";
 import * as files from "./files";
+import { hide as hideCard, wire as wireCard } from "./hovercard";
 import { applyPanes, wirePanes } from "./panes";
 import * as repopicker from "./repopicker";
 import { fromUrl, type Route, sameUrl, toUrl } from "./router";
@@ -738,6 +739,9 @@ detailPane.onSelect((index) => {
 });
 
 function renderDetails(): void {
+  // The references a card was opened over are about to be replaced, and a
+  // pointer sitting still over one of them will not say it has left.
+  hideCard();
   const d = state.details;
   if (!d) {
     el.detailMeta.innerHTML = `<div class="detail-empty">Select a commit to see its details.</div>`;
@@ -748,17 +752,11 @@ function renderDetails(): void {
   const chips = d.refs
     .map((l) => `<span class="chip ${l.kind}">${escapeHtml(l.name)}</span>`)
     .join("");
-  // A parent's summary, when the graph on screen happens to hold it: a short id
-  // alone says nothing about what the commit was.
-  const loaded = new Map((state.graph?.rows ?? []).map((r) => [r.id, r]));
   const parents = d.parents
-    .map((p) => {
-      const row = loaded.get(p);
-      const title = row
-        ? ` title="${escapeHtml(`${row.summary}\n${row.author}, ${formatDate(row.time)}`)}"`
-        : "";
-      return `<a href="#" class="parent-link" data-id="${p}"${title}>${p.slice(0, 7)}</a>`;
-    })
+    .map(
+      (p) =>
+        `<a href="#" class="parent-link" data-id="${p}" data-commit="${p}">${p.slice(0, 7)}</a>`,
+    )
     .join(", ");
   el.detailMeta.innerHTML =
     `<div class="detail-row1"><span class="sha">${d.id}</span>${chips}</div>` +
@@ -941,6 +939,11 @@ function wire(): void {
   } else {
     el.emptyHint.textContent = "Connecting to the commit-browser server…";
   }
+  // A parent is named by a short id, which says nothing about the commit; the
+  // card fills that in without leaving the pane.
+  wireCard(el.detailMeta, () => state.repoPath, (repo, id) =>
+    backend.getCommitMeta(repo, id),
+  );
   repopicker.wire(backend.editableRepos);
   repopicker.onSelect((repo) => void openRepo(repo, true));
   repopicker.onAdd(() => void addRepo());
