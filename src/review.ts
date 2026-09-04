@@ -358,9 +358,12 @@ export async function load(
   // A branch of one commit shows that commit rather than "all changes": the
   // two are the same diff, and the commit brings its message with it.
   const only = rs.result.commits.length === 1 ? rs.result.commits[0].id : null;
-  // Otherwise, a commit asked for by the URL if this comparison still has it.
-  const wanted =
-    only ?? (showing && rs.result.commits.some((c) => c.id === showing) ? showing : ALL);
+  // Otherwise the commit asked for, or failing that the one already on screen:
+  // loading the same comparison again, which is what a refresh does, should
+  // leave the reader where they were. Either is dropped if this comparison no
+  // longer holds it, as is the marker for the whole branch.
+  const asked = showing ?? rs.showing;
+  const wanted = only ?? (rs.result.commits.some((c) => c.id === asked) ? asked : ALL);
   await showCommit(wanted);
 }
 
