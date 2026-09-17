@@ -105,6 +105,8 @@ export interface ReviewCommit {
   summary: string;
   author: string;
   time: number;
+  /// Branches and tags sitting on this commit.
+  refs: RefLabel[];
 }
 
 export interface ReviewResult {

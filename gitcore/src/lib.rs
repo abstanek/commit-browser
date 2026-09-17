@@ -142,6 +142,9 @@ pub struct ReviewCommit {
     pub summary: String,
     pub author: String,
     pub time: i64,
+    /// Branches and tags sitting on this commit, the branch under review's
+    /// own among them.
+    pub refs: Vec<RefLabel>,
 }
 
 #[derive(Serialize, Debug)]
@@ -645,6 +648,7 @@ pub fn review(repo_path: &str, base: &str, head: &str) -> Result<ReviewResult> {
     let head_commit = resolve_commit(&repo, head)?;
     let merge_base = repo.merge_base(base_commit.id(), head_commit.id()).ok();
 
+    let labels = ref_labels(&repo);
     let mut walk = repo.revwalk().map_err(err)?;
     walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
         .map_err(err)?;
@@ -665,6 +669,7 @@ pub fn review(repo_path: &str, base: &str, head: &str) -> Result<ReviewResult> {
             summary: c.summary().ok().flatten().unwrap_or("").to_string(),
             author: c.author().name().unwrap_or("").to_string(),
             time: c.time().seconds(),
+            refs: labels.get(&oid).cloned().unwrap_or_default(),
         });
     }
 
