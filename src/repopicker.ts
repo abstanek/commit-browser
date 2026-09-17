@@ -33,7 +33,7 @@ let menu: Dropdown;
 
 /// The rows, in the order they are drawn, for the keyboard to walk.
 function rows(): HTMLButtonElement[] {
-  return [...el.list.querySelectorAll<HTMLButtonElement>(".repo-option")];
+  return [...el.list.querySelectorAll<HTMLButtonElement>(".dropdown-option")];
 }
 
 /// Draw the button and the list. Called whenever the set of repositories or the
@@ -51,10 +51,10 @@ export function render(list: RepoInfo[], open_: string | null): void {
   el.list.innerHTML = repos
     .map((r) => {
       const on = r.display_path === current;
-      return `<div class="repo-row${on ? " current" : ""}">
-        <button class="repo-option" role="option" aria-selected="${on}" data-repo="${escapeHtml(r.display_path)}">
-          <span class="repo-option-name">${escapeHtml(r.name)}</span>
-          <span class="repo-option-path">${escapeHtml(r.display_path)}</span>
+      return `<div class="dropdown-row${on ? " current" : ""}">
+        <button class="dropdown-option" role="option" aria-selected="${on}" data-repo="${escapeHtml(r.display_path)}">
+          <span class="dropdown-primary">${escapeHtml(r.name)}</span>
+          <span class="dropdown-secondary">${escapeHtml(r.display_path)}</span>
         </button>${
           editable
             ? `<button class="repo-remove" data-remove="${escapeHtml(r.display_path)}" title="Remove ${escapeHtml(r.name)} from the list. Nothing on disk is touched.">✕</button>`
@@ -103,7 +103,7 @@ export function wire(canEdit: boolean): void {
       removeCb(remove.dataset.remove!);
       return;
     }
-    const option = target.closest<HTMLElement>(".repo-option");
+    const option = target.closest<HTMLElement>(".dropdown-option");
     if (!option) return;
     menu.close();
     if (option.dataset.repo !== current) selectCb(option.dataset.repo!);
