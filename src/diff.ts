@@ -67,6 +67,8 @@ export function patchHtml(
     return `<div class="detail-empty">Binary file.</div>`;
   }
   const lines = f.patch.split("\n");
+  // The newline a patch ends on finishes its last line; it does not start another.
+  if (lines[lines.length - 1] === "") lines.pop();
   const bodies = hunkBodies(lines);
   const out: string[] = [];
 
