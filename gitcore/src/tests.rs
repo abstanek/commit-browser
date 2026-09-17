@@ -461,3 +461,42 @@ fn merge_commit_layout() {
     assert!(ri_a > ri_b && ri_a > ri_c);
     check_edge_continuity(&g.rows);
 }
+
+/// How long a diff says `f.txt` is after a commit that rewrites it.
+fn lines_after(before: &str, after: &str) -> usize {
+    let mut t = TestRepo::new();
+    let first = t.commit("main", &[], &[("f.txt", before)]);
+    let second = t.commit("main", &[first], &[("f.txt", after)]);
+    let d = commit_details(&t.path, &second.to_string()).unwrap();
+    d.files[0].lines
+}
+
+#[test]
+fn a_diff_says_how_long_the_file_is_afterwards() {
+    assert_eq!(lines_after("a\n", "a\nb\nc\n"), 3);
+}
+
+#[test]
+fn a_last_line_without_a_newline_still_counts() {
+    assert_eq!(lines_after("a\n", "a\nb"), 2);
+}
+
+#[test]
+fn a_deleted_file_has_no_lines_afterwards() {
+    let mut t = TestRepo::new();
+    let first = t.commit("main", &[], &[("keep.txt", "k\n"), ("gone.txt", "a\nb\n")]);
+    // The helper only ever adds to its parent's tree, so take the file out by hand.
+    let sig = Signature::new("Test", "test@example.com", &Time::new(t.clock + 60, 0)).unwrap();
+    let parent = t.repo.find_commit(first).unwrap();
+    let mut tb = t.repo.treebuilder(Some(&parent.tree().unwrap())).unwrap();
+    tb.remove("gone.txt").unwrap();
+    let tree = t.repo.find_tree(tb.write().unwrap()).unwrap();
+    let second = t
+        .repo
+        .commit(None, &sig, &sig, "remove it", &tree, &[&parent])
+        .unwrap();
+
+    let d = commit_details(&t.path, &second.to_string()).unwrap();
+    assert_eq!(d.files[0].status, "deleted");
+    assert_eq!(d.files[0].lines, 0);
+}
