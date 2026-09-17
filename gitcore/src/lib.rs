@@ -100,6 +100,10 @@ pub struct FileDiff {
     pub binary: bool,
     /// Size of the file after the change, or before it for a deletion.
     pub size: u64,
+    /// Lines in the file after the change, which a patch cannot say: its last
+    /// hunk gives no hint of how much file lies beyond it. Zero when there is
+    /// no text on that side - a deletion, a binary.
+    pub lines: usize,
     /// True when the file is an image this crate can hand over for display.
     pub image: bool,
     pub patch: String,
@@ -502,6 +506,21 @@ pub fn commit_details(repo_path: &str, id: &str) -> Result<CommitDetails> {
     })
 }
 
+/// Lines in one side of a delta, counting a last line with no newline after
+/// it. Zero for anything that is not text to be read: no blob on this side, or
+/// a binary one.
+fn line_count(repo: &Repository, file: &git2::DiffFile<'_>) -> usize {
+    let Ok(blob) = repo.find_blob(file.id()) else {
+        return 0;
+    };
+    if blob.is_binary() {
+        return 0;
+    }
+    let content = blob.content();
+    let unterminated = !content.is_empty() && !content.ends_with(b"\n");
+    content.iter().filter(|b| **b == b'\n').count() + usize::from(unterminated)
+}
+
 /// Per-file patches between two trees. A missing tree means the empty tree, so
 /// passing None as `old` yields an all-added diff.
 fn diff_files(
@@ -536,6 +555,7 @@ fn diff_files(
                 deletions: 0,
                 binary: true,
                 size: delta.new_file().size().max(delta.old_file().size()),
+                lines: 0,
                 image: image_mime(
                     delta
                         .new_file()
@@ -570,6 +590,7 @@ fn diff_files(
         };
         // A deletion has nothing on the new side, so fall back to the old one.
         let size = delta.new_file().size().max(delta.old_file().size());
+        let lines = line_count(repo, &delta.new_file());
         let image = image_mime(&new_path).is_some();
         let (_, additions, deletions) = patch.line_stats().unwrap_or((0, 0, 0));
         let (text, truncated) = if binary {
@@ -599,6 +620,7 @@ fn diff_files(
             deletions,
             binary,
             size,
+            lines,
             image,
             patch: text,
             truncated,

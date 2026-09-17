@@ -59,6 +59,8 @@ export interface FileDiff {
   binary: boolean;
   /// Size after the change, or before it for a deletion.
   size: number;
+  /// Lines in the file after the change; zero when that side has no text.
+  lines: number;
   /// True when the file is an image the host can hand over for display.
   image: boolean;
   patch: string;
