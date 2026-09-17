@@ -7,6 +7,7 @@
 /// buttons, with the keyboard behaviour that implies written out.
 
 import type { RepoInfo } from "./api";
+import { createDropdown, type Dropdown } from "./dropdown";
 import { $, escapeHtml } from "./util";
 
 const el = {
@@ -28,32 +29,11 @@ let removeCb: (repo: string) => void = () => {};
 /// if the drop-down has an add button under them.
 let editable = false;
 
-function isOpen(): boolean {
-  return !el.menu.hidden;
-}
+let menu: Dropdown;
 
 /// The rows, in the order they are drawn, for the keyboard to walk.
 function rows(): HTMLButtonElement[] {
   return [...el.list.querySelectorAll<HTMLButtonElement>(".repo-option")];
-}
-
-function open(): void {
-  if (isOpen()) return;
-  el.menu.hidden = false;
-  el.button.setAttribute("aria-expanded", "true");
-  const active = rows().find((r) => r.dataset.repo === current) ?? rows()[0];
-  active?.focus();
-}
-
-function close(focusButton = true): void {
-  if (!isOpen()) return;
-  el.menu.hidden = true;
-  el.button.setAttribute("aria-expanded", "false");
-  if (focusButton) el.button.focus();
-}
-
-export function isMenuOpen(): boolean {
-  return isOpen();
 }
 
 /// Draw the button and the list. Called whenever the set of repositories or the
@@ -103,20 +83,15 @@ export function onRemove(cb: (repo: string) => void): void {
   removeCb = cb;
 }
 
-/// Move the keyboard through the rows, wrapping at both ends so holding a
-/// direction never dead-ends.
-function step(from: HTMLElement, delta: number): void {
-  const all = rows();
-  if (!all.length) return;
-  const i = all.indexOf(from as HTMLButtonElement);
-  const next = all[(((i < 0 ? 0 : i) + delta) % all.length + all.length) % all.length];
-  next.focus();
-}
-
 export function wire(canEdit: boolean): void {
   editable = canEdit;
-
-  el.button.addEventListener("click", () => (isOpen() ? close() : open()));
+  menu = createDropdown({
+    root: el.picker,
+    button: el.button,
+    menu: el.menu,
+    rows,
+    current: () => rows().find((r) => r.dataset.repo === current),
+  });
 
   el.list.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
@@ -130,48 +105,14 @@ export function wire(canEdit: boolean): void {
     }
     const option = target.closest<HTMLElement>(".repo-option");
     if (!option) return;
-    close();
+    menu.close();
     if (option.dataset.repo !== current) selectCb(option.dataset.repo!);
   });
 
   el.add.addEventListener("click", () => {
     // Put the menu away without pulling focus back to the trigger: this action
     // opens a window of its own, and focus belongs wherever that leads.
-    close(false);
+    menu.close(false);
     addCb();
-  });
-
-  // Keys are handled on the menu so they never reach the commit list, which
-  // reads the arrows for its own navigation.
-  el.menu.addEventListener("keydown", (e) => {
-    const target = e.target as HTMLElement;
-    switch (e.key) {
-      case "ArrowDown":
-        step(target, 1);
-        break;
-      case "ArrowUp":
-        step(target, -1);
-        break;
-      case "Escape":
-        close();
-        break;
-      default:
-        return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-  });
-
-  // A click anywhere else, or focus leaving the picker entirely, puts it away.
-  document.addEventListener("pointerdown", (e) => {
-    if (isOpen() && !el.picker.contains(e.target as Node)) close(false);
-  });
-  el.picker.addEventListener("focusout", (e) => {
-    // Where focus is going, which is known now and saves waiting for it to
-    // land. Nowhere at all is not the reader leaving: macOS does not focus a
-    // button when it is clicked, so every press inside the menu looks like
-    // that, and closing on it took the menu away before the click arrived.
-    const to = e.relatedTarget as Node | null;
-    if (to && !el.picker.contains(to)) close(false);
   });
 }
