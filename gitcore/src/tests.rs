@@ -500,3 +500,23 @@ fn a_deleted_file_has_no_lines_afterwards() {
     assert_eq!(d.files[0].status, "deleted");
     assert_eq!(d.files[0].lines, 0);
 }
+
+#[test]
+fn review_names_the_branches_on_its_commits() {
+    let mut t = TestRepo::new();
+    let base = t.commit("main", &[], &[("f.txt", "a\n")]);
+    let first = t.commit("work", &[base], &[("f.txt", "a\nb\n")]);
+    let second = t.commit("work", &[first], &[("f.txt", "a\nb\nc\n")]);
+    // Another branch starts part way down the one under review.
+    t.repo
+        .reference("refs/heads/spinoff", first, true, "test")
+        .unwrap();
+
+    let r = review(&t.path, "refs/heads/main", "refs/heads/work").unwrap();
+    let names = |id: Oid| -> Vec<String> {
+        let c = r.commits.iter().find(|c| c.id == id.to_string()).unwrap();
+        c.refs.iter().map(|l| l.name.clone()).collect()
+    };
+    assert_eq!(names(first), ["spinoff"]);
+    assert_eq!(names(second), ["work"]);
+}
