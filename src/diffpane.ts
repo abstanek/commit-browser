@@ -1,3 +1,4 @@
+import { backend } from "@backend";
 import type { FileDiff } from "./api";
 import {
   addRange,
@@ -7,9 +8,18 @@ import {
   removeRange,
   saveFolds,
 } from "./collapse";
-import { fileLabel, patchHtml, statsHtml, STATUS_LETTER } from "./diff";
+import {
+  type Context,
+  fileLabel,
+  moreStep,
+  patchHtml,
+  type Room,
+  room,
+  statsHtml,
+  STATUS_LETTER,
+} from "./diff";
 import { hydrate } from "./imageview";
-import { escapeHtml } from "./util";
+import { escapeHtml, toast } from "./util";
 
 /// A scrolling stack of file diffs: reading past the end of one file runs
 /// straight into the next, and the pane reports the change so the file list
@@ -20,9 +30,10 @@ const BATCH = 10;
 /// How close to the bottom the reader gets before the next batch is added.
 const PREFETCH = 800;
 
-/// What is being diffed, and where to read a file that has no patch to draw.
-/// `scope` keys folded lines to this comparison rather than letting them leak
-/// between commits; `repo` and `rev` are where an image in the diff is read at.
+/// What is being diffed, and where to read the files in it as they stand after
+/// the change. `scope` keys folded lines to this comparison rather than letting
+/// them leak between commits; `repo` and `rev` are where an image is read at,
+/// and where the lines around a hunk come from.
 export interface DiffAt {
   scope: string;
   repo: string;
@@ -55,6 +66,9 @@ export function createDiffPane(root: HTMLElement): DiffPane {
   /// Folded line ranges per file index, and the line range being selected.
   let folds: Range[][] = [];
   let picked: { file: number; from: number; to: number } | null = null;
+  /// Lines let in around each file's hunks. Not kept between visits the way
+  /// folds are: it is a look around, not a decision about the diff.
+  let contexts: (Context | undefined)[] = [];
 
   function lineCount(index: number): number {
     return files[index].patch.split("\n").length;
@@ -93,7 +107,7 @@ export function createDiffPane(root: HTMLElement): DiffPane {
       `<span class="status ${f.status}">${STATUS_LETTER[f.status] ?? "?"}</span>` +
       `<span class="diff-path">${fileLabel(f)}</span>${open}${statsHtml(f)}` +
       `<span class="diff-actions">${actionsHtml(index)}</span></div>` +
-      patchHtml(f, hidden, at ?? undefined) +
+      patchHtml(f, hidden, at ?? undefined, contexts[index]) +
       `</section>`
     );
   }
@@ -110,6 +124,33 @@ export function createDiffPane(root: HTMLElement): DiffPane {
   function setFolds(index: number, next: Range[]): void {
     folds[index] = next;
     if (scope) saveFolds(scope, files[index].path, lineCount(index), next);
+    redraw(index);
+  }
+
+  /// Let in the next stretch of the file on one side of a hunk. The file is
+  /// fetched on the first press and kept for the ones after.
+  async function loadMore(index: number, head: number, side: keyof Room): Promise<void> {
+    if (!at) return;
+    const showing = files;
+    const ctx = (contexts[index] ??= { shown: new Map(), text: null });
+    if (!ctx.text) {
+      let text: string;
+      try {
+        text = (await backend.readFile(at.repo, at.rev, files[index].path)).text;
+      } catch (e) {
+        toast(`Could not read ${files[index].path}: ${e}`);
+        return;
+      }
+      // Another diff may have been put in the pane while that was in flight.
+      if (files !== showing) return;
+      const lines = text.split("\n");
+      // A final newline ends the last line rather than starting another.
+      if (lines[lines.length - 1] === "") lines.pop();
+      ctx.text = lines;
+    }
+    const left = room(files[index], ctx).get(head)?.[side] ?? 0;
+    const now = ctx.shown.get(head) ?? { above: 0, below: 0 };
+    ctx.shown.set(head, { ...now, [side]: now[side] + moreStep(left) });
     redraw(index);
   }
 
@@ -190,6 +231,11 @@ export function createDiffPane(root: HTMLElement): DiffPane {
       const { from, to } = picked;
       picked = null;
       setFolds(index, addRange(folds[index] ?? [], from, to));
+      return;
+    }
+    const more = target.closest<HTMLElement>(".dl.more");
+    if (more) {
+      void loadMore(index, Number(more.dataset.hunk), more.dataset.more as keyof Room);
       return;
     }
     const hunk = target.closest<HTMLElement>(".hunk-toggle");
@@ -288,6 +334,7 @@ export function createDiffPane(root: HTMLElement): DiffPane {
       at = nextAt ?? null;
       scope = nextAt?.scope ?? "";
       picked = null;
+      contexts = [];
       folds = files.map((f) =>
         scope ? loadFolds(scope, f.path, f.patch.split("\n").length) : [],
       );

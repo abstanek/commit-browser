@@ -950,6 +950,20 @@ body {
   color: var(--text);
 }
 
+/* The offer of more of the file around a hunk. Quieter than a fold, which
+   stands for something the reader put away; this is only a way onward. */
+.dl.more {
+  color: var(--accent);
+  background: var(--bg-alt);
+  cursor: pointer;
+  padding-left: 10px;
+  user-select: none;
+}
+
+.dl.more:hover {
+  background: var(--hover);
+}
+
 .hunk-toggle {
   display: inline-block;
   width: 1.1rem;

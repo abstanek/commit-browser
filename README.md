@@ -12,7 +12,8 @@ Three views, switched from the toolbar:
   style: the whole branch diff as a file tree, and a picker to step through the
   branch's individual commits. Fold a hunk with the arrow on its `@@` header, or
   drag down the lines to fold just that group; folds are remembered per
-  comparison
+  comparison. In any diff, a hunk offers more of the file above and below it,
+  twenty lines at a press
 - **Files** - the repository as it stands at one revision, with
   syntax-highlighted sources and images shown as pictures. The revision is a
   branch picked in the sidebar, or the commit a diff was read from: each file
