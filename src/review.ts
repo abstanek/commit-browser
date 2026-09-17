@@ -1,7 +1,8 @@
 import { backend } from "@backend";
-import type { FileDiff, ReviewResult } from "./api";
+import type { FileDiff, RefLabel, ReviewCommit, ReviewResult } from "./api";
 import { statsHtml, STATUS_LETTER } from "./diff";
 import { createDiffPane } from "./diffpane";
+import { createDropdown } from "./dropdown";
 import { $, escapeHtml, formatDate, shortRef, toast } from "./util";
 
 /// Pull-request style view: the whole of one branch measured against the
@@ -50,7 +51,11 @@ const el = {
   root: $("review"),
   summary: $("review-summary"),
   nav: $("review-nav"),
-  commitSelect: $<HTMLSelectElement>("commit-select"),
+  picker: $("commit-picker"),
+  pickerButton: $<HTMLButtonElement>("commit-picker-button"),
+  pickerCurrent: $("commit-picker-current"),
+  pickerMenu: $("commit-picker-menu"),
+  pickerList: $("commit-picker-list"),
   prev: $<HTMLButtonElement>("commit-prev"),
   next: $<HTMLButtonElement>("commit-next"),
   tree: $("review-tree"),
@@ -207,10 +212,32 @@ function renderSummary(): void {
       : "");
 }
 
+/// What the picker steps through: the whole branch, then its commits oldest
+/// first. Unlike the graph, a branch is reviewed in the order it was written,
+/// so stepping forward moves to the newer commit.
+function choices(): string[] {
+  return [ALL, ...[...(rs.result?.commits ?? [])].reverse().map((c) => c.id)];
+}
+
+/// The refs on a commit worth pointing out. Every row is on the branch under
+/// review, so its own name says nothing; any other name says this is where
+/// another branch stands, or what a tag marks.
+function chipsHtml(c: ReviewCommit): string {
+  const full = (l: RefLabel): string =>
+    `refs/${l.kind === "local" ? "heads" : l.kind === "remote" ? "remotes" : "tags"}/${l.name}`;
+  return c.refs
+    .filter((l) => full(l) !== rs.head)
+    .map((l) => {
+      const what = l.kind === "tag" ? "Tagged" : "The tip of";
+      return `<span class="chip ${l.kind}" title="${what} ${escapeHtml(l.name)}">${escapeHtml(l.name)}</span>`;
+    })
+    .join("");
+}
+
 function renderCommitSelect(): void {
   const r = rs.result;
   if (!r) {
-    el.commitSelect.innerHTML = "";
+    el.pickerList.innerHTML = "";
     el.nav.hidden = true;
     return;
   }
@@ -218,20 +245,32 @@ function renderCommitSelect(): void {
   // that commit are the same diff, so the picker would offer a choice that
   // makes no difference.
   el.nav.hidden = r.commits.length <= 1;
-  // Oldest first, unlike the graph: a branch is reviewed in the order it was
-  // written, so stepping forward moves to the newer commit.
-  const opts = [
-    `<option value="${ALL}">All changes (${r.commits.length} commits)</option>`,
-    ...[...r.commits].reverse().map(
-      (c) =>
-        `<option value="${c.id}">${c.short_id}  ${escapeHtml(c.summary)}</option>`,
-    ),
-  ];
-  el.commitSelect.innerHTML = opts.join("");
-  el.commitSelect.value = rs.showing;
-  const i = el.commitSelect.selectedIndex;
+  const all = `All changes (${r.commits.length} commits)`;
+  const row = (value: string, primary: string, secondary: string): string => {
+    const on = value === rs.showing;
+    return (
+      `<div class="dropdown-row${on ? " current" : ""}">` +
+      `<button class="dropdown-option" role="option" aria-selected="${on}" data-commit="${value}">` +
+      `<span class="dropdown-primary commit-line">${primary}</span>` +
+      `<span class="dropdown-secondary">${secondary}</span>` +
+      `</button></div>`
+    );
+  };
+  const line = (c: ReviewCommit): string =>
+    `<span class="sha">${c.short_id}</span>` +
+    `<span class="commit-summary">${escapeHtml(c.summary)}</span>${chipsHtml(c)}`;
+  el.pickerList.innerHTML = [
+    row(ALL, "All changes", `The whole branch, ${r.commits.length} commits`),
+    ...[...r.commits]
+      .reverse()
+      .map((c) => row(c.id, line(c), `${escapeHtml(c.author)}, ${formatDate(c.time)}`)),
+  ].join("");
+
+  const shown = r.commits.find((c) => c.id === rs.showing);
+  el.pickerCurrent.innerHTML = shown ? line(shown) : escapeHtml(all);
+  const i = choices().indexOf(rs.showing);
   el.prev.disabled = i <= 0;
-  el.next.disabled = i < 0 || i >= el.commitSelect.options.length - 1;
+  el.next.disabled = i < 0 || i >= choices().length - 1;
 }
 
 function renderTree(): void {
@@ -403,9 +442,10 @@ function select(i: number): void {
 }
 
 function step(delta: number): void {
-  const i = el.commitSelect.selectedIndex + delta;
-  if (i < 0 || i >= el.commitSelect.options.length) return;
-  void showCommit(el.commitSelect.options[i].value).then(navigated);
+  const all = choices();
+  const i = all.indexOf(rs.showing) + delta;
+  if (i < 0 || i >= all.length) return;
+  void showCommit(all[i]).then(navigated);
 }
 
 /// Fires when the reader asks to see the commit on screen in the graph.
@@ -436,9 +476,24 @@ export function wire(): void {
     renderMessage();
   });
 
-  el.commitSelect.addEventListener("change", () =>
-    void showCommit(el.commitSelect.value).then(navigated),
-  );
+  const rows = (): HTMLElement[] => [
+    ...el.pickerList.querySelectorAll<HTMLElement>(".dropdown-option"),
+  ];
+  const menu = createDropdown({
+    root: el.picker,
+    button: el.pickerButton,
+    menu: el.pickerMenu,
+    rows,
+    current: () => rows().find((r) => r.dataset.commit === rs.showing),
+  });
+  el.pickerList.addEventListener("click", (ev) => {
+    const option = (ev.target as HTMLElement).closest<HTMLElement>(".dropdown-option");
+    if (!option) return;
+    menu.close();
+    if (option.dataset.commit !== rs.showing) {
+      void showCommit(option.dataset.commit!).then(navigated);
+    }
+  });
   el.prev.addEventListener("click", () => step(-1));
   el.next.addEventListener("click", () => step(1));
 

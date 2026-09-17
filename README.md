@@ -10,7 +10,8 @@ Three views, switched from the toolbar:
   showing the selected commit's diff
 - **Review** - one branch against the branch it would merge into, pull-request
   style: the whole branch diff as a file tree, and a picker to step through the
-  branch's individual commits. Fold a hunk with the arrow on its `@@` header, or
+  branch's individual commits, which points out any other branch or tag
+  sitting on one of them. Fold a hunk with the arrow on its `@@` header, or
   drag down the lines to fold just that group; folds are remembered per
   comparison. In any diff, a hunk offers more of the file above and below it,
   twenty lines at a press

@@ -1089,15 +1089,61 @@ body {
   cursor: default;
 }
 
-#commit-select {
+/* The commit picker: a drop-down rather than a <select>, so a row has room for
+   who wrote a commit and for what else points at it. */
+#commit-picker {
+  position: relative;
+  min-width: 0;
+}
+
+#commit-picker-button {
   font: inherit;
   font-size: 0.92rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   max-width: 32rem;
   color: var(--text);
   background: var(--btn-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 3px 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+#commit-picker-button:hover {
+  background: var(--btn-hover);
+}
+
+#commit-picker-current,
+.commit-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+#commit-picker .sha {
+  flex: none;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.commit-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* It sits at the right of the header, so it opens leftwards from there. */
+#commit-picker-menu {
+  left: auto;
+  right: 0;
+  width: 36rem;
+  max-width: calc(100vw - 16px);
 }
 
 #review-message {
