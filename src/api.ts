@@ -53,7 +53,9 @@ export interface GraphResult {
 export interface FileDiff {
   path: string;
   old_path: string | null;
-  status: "added" | "modified" | "deleted" | "renamed" | "typechange";
+  /// "conflict" only ever comes from a merge preview: both sides changed the
+  /// file, differently, and there is no single result to show.
+  status: "added" | "modified" | "deleted" | "renamed" | "typechange" | "conflict";
   additions: number;
   deletions: number;
   binary: boolean;
@@ -119,6 +121,15 @@ export interface ReviewResult {
   files: FileDiff[];
 }
 
+/// What merging a branch into its target would change on the target now. A
+/// branch whose work already arrived some other way changes nothing here.
+export interface MergePreview {
+  base_id: string;
+  head_id: string;
+  files: FileDiff[];
+  conflicts: number;
+}
+
 export interface TreeEntry {
   name: string;
   path: string;
@@ -172,6 +183,8 @@ export interface Backend {
   getCommitMeta(repo: string, id: string): Promise<CommitMeta>;
   /// Diff `head` against the commit it would merge into, pull-request style.
   getReview(repo: string, base: string, head: string): Promise<ReviewResult>;
+  /// What merging `head` into `base` would change on `base` as it stands now.
+  getMergePreview(repo: string, base: string, head: string): Promise<MergePreview>;
   /// One directory of the tree at `rev`; empty `path` is the root.
   listTree(repo: string, rev: string, path: string): Promise<TreeResult>;
   readFile(repo: string, rev: string, path: string): Promise<FileContent>;

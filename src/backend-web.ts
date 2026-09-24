@@ -5,6 +5,7 @@ import type {
   FileContent,
   GraphResult,
   ImageContent,
+  MergePreview,
   RefsResult,
   RepoInfo,
   ReviewResult,
@@ -46,6 +47,8 @@ export const backend: Backend = {
     ),
   getReview: (repo, base, head) =>
     get<ReviewResult>(`review?${new URLSearchParams({ repo, base, head })}`),
+  getMergePreview: (repo, base, head) =>
+    get<MergePreview>(`merge?${new URLSearchParams({ repo, base, head })}`),
   listTree: (repo, rev, path) =>
     get<TreeResult>(`tree?${new URLSearchParams({ repo, rev, path })}`),
   readFile: (repo, rev, path) =>

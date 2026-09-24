@@ -169,6 +169,14 @@ async fn review(
     blocking(move || gitcore::review(&dir, &p.base, &p.head)).await
 }
 
+async fn merge(
+    State(s): State<Arc<AppState>>,
+    Query(p): Query<ReviewParams>,
+) -> Result<Json<gitcore::MergePreview>, ApiError> {
+    let dir = s.git_dir(p.repo.as_deref())?;
+    blocking(move || gitcore::merge_preview(&dir, &p.base, &p.head)).await
+}
+
 #[derive(serde::Deserialize)]
 struct PathParams {
     rev: String,
@@ -350,6 +358,7 @@ fn api_router() -> Router<Arc<AppState>> {
         .route("/api/refs", get(refs))
         .route("/api/graph", get(graph))
         .route("/api/review", get(review))
+        .route("/api/merge", get(merge))
         .route("/api/tree", get(tree))
         .route("/api/file", get(file))
         .route("/api/image", get(image))

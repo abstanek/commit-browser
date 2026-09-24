@@ -43,6 +43,15 @@ fn get_review(repo: String, base: String, head: String) -> Result<gitcore::Revie
 }
 
 #[tauri::command]
+fn get_merge_preview(
+    repo: String,
+    base: String,
+    head: String,
+) -> Result<gitcore::MergePreview, String> {
+    gitcore::merge_preview(&git_dir(&repo)?, &base, &head)
+}
+
+#[tauri::command]
 fn list_tree(repo: String, rev: String, path: String) -> Result<gitcore::TreeResult, String> {
     gitcore::list_tree(&git_dir(&repo)?, &rev, &path)
 }
@@ -67,6 +76,7 @@ pub fn run() {
             get_commit_details,
             get_commit_meta,
             get_review,
+            get_merge_preview,
             list_tree,
             read_file,
             read_image

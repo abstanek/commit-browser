@@ -7,6 +7,7 @@ import type {
   FileContent,
   GraphResult,
   ImageContent,
+  MergePreview,
   RefsResult,
   RepoInfo,
   ReviewResult,
@@ -53,6 +54,8 @@ export const backend: Backend = {
   getCommitDetails: (repo, id) => invoke<CommitDetails>("get_commit_details", { repo, id }),
   getCommitMeta: (repo, id) => invoke<CommitMeta>("get_commit_meta", { repo, id }),
   getReview: (repo, base, head) => invoke<ReviewResult>("get_review", { repo, base, head }),
+  getMergePreview: (repo, base, head) =>
+    invoke<MergePreview>("get_merge_preview", { repo, base, head }),
   listTree: (repo, rev, path) => invoke<TreeResult>("list_tree", { repo, rev, path }),
   readFile: (repo, rev, path) => invoke<FileContent>("read_file", { repo, rev, path }),
   readImage: (repo, rev, path) => invoke<ImageContent>("read_image", { repo, rev, path }),
