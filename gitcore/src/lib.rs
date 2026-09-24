@@ -93,7 +93,7 @@ pub struct GraphResult {
 pub struct FileDiff {
     pub path: String,
     pub old_path: Option<String>,
-    /// "added" | "modified" | "deleted" | "renamed" | "typechange"
+    /// "added" | "modified" | "deleted" | "renamed" | "typechange" | "conflict"
     pub status: String,
     pub additions: usize,
     pub deletions: usize,
@@ -145,6 +145,21 @@ pub struct ReviewCommit {
     /// Branches and tags sitting on this commit, the branch under review's
     /// own among them.
     pub refs: Vec<RefLabel>,
+}
+
+/// What merging a branch into its target would change on the target, as of
+/// now. Unlike a review's diff, this is against the target's tip rather than
+/// the merge base: a branch whose work has already arrived some other way -
+/// rebased, squashed, cherry-picked - changes nothing here, and one that has
+/// drifted from what arrived shows up as conflicts.
+#[derive(Serialize, Debug)]
+pub struct MergePreview {
+    pub base_id: String,
+    pub head_id: String,
+    /// Files the merge would touch. A conflicted one has status "conflict" and
+    /// no patch: there is no single result to show.
+    pub files: Vec<FileDiff>,
+    pub conflicts: usize,
 }
 
 #[derive(Serialize, Debug)]
@@ -552,6 +567,29 @@ fn files_of(repo: &Repository, mut diff: Diff) -> Result<Vec<FileDiff>> {
     let mut files = Vec::new();
     let n = diff.deltas().len();
     for idx in 0..n {
+        let delta = diff.get_delta(idx).unwrap();
+        if delta.status() == git2::Delta::Conflicted {
+            let path = delta
+                .new_file()
+                .path()
+                .or_else(|| delta.old_file().path())
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            files.push(FileDiff {
+                image: image_mime(&path).is_some(),
+                path,
+                old_path: None,
+                status: status_name(delta.status()),
+                additions: 0,
+                deletions: 0,
+                binary: false,
+                size: 0,
+                lines: 0,
+                patch: String::new(),
+                truncated: false,
+            });
+            continue;
+        }
         let Ok(Some(mut patch)) = git2::Patch::from_diff(&diff, idx) else {
             // Binary or unreadable delta: still list the file.
             let delta = diff.get_delta(idx).unwrap();
@@ -703,6 +741,40 @@ pub fn review(repo_path: &str, base: &str, head: &str) -> Result<ReviewResult> {
         commits,
         commits_truncated,
         behind,
+        files,
+    })
+}
+
+/// A merge of `head` into `base` done in memory and diffed against `base`.
+///
+/// libgit2 writes any blobs it has to merge into the object store as it goes,
+/// so a preview can leave dangling objects behind; nothing points at them and
+/// gc clears them. No ref moves.
+pub fn merge_preview(repo_path: &str, base: &str, head: &str) -> Result<MergePreview> {
+    let repo = Repository::open(repo_path).map_err(err)?;
+    let base_commit = resolve_commit(&repo, base)?;
+    let head_commit = resolve_commit(&repo, head)?;
+    let ancestor = repo
+        .merge_base(base_commit.id(), head_commit.id())
+        .map_err(|_| "the branches share no history to merge across".to_string())?;
+    let ancestor_tree = repo
+        .find_commit(ancestor)
+        .map_err(err)?
+        .tree()
+        .map_err(err)?;
+    let base_tree = base_commit.tree().map_err(err)?;
+    let head_tree = head_commit.tree().map_err(err)?;
+    let index = repo
+        .merge_trees(&ancestor_tree, &base_tree, &head_tree, None)
+        .map_err(err)?;
+    let diff = repo
+        .diff_tree_to_index(Some(&base_tree), Some(&index), Some(&mut diff_options()))
+        .map_err(err)?;
+    let files = files_of(&repo, diff)?;
+    Ok(MergePreview {
+        base_id: base_commit.id().to_string(),
+        head_id: head_commit.id().to_string(),
+        conflicts: files.iter().filter(|f| f.status == "conflict").count(),
         files,
     })
 }
@@ -888,6 +960,7 @@ fn status_name(s: git2::Delta) -> String {
         git2::Delta::Modified => "modified",
         git2::Delta::Renamed => "renamed",
         git2::Delta::Typechange => "typechange",
+        git2::Delta::Conflicted => "conflict",
         _ => "modified",
     }
     .to_string()
