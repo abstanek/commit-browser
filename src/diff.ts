@@ -9,10 +9,12 @@ export const STATUS_LETTER: Record<string, string> = {
   deleted: "D",
   renamed: "R",
   typechange: "T",
+  conflict: "C",
 };
 
 /// Added/removed counts, or a marker for files with no readable patch.
 export function statsHtml(f: FileDiff): string {
+  if (f.status === "conflict") return `<span class="filestat conflict">conflict</span>`;
   return f.binary
     ? `<span class="filestat">bin</span>`
     : `<span class="filestat add">+${f.additions}</span>` +
@@ -147,6 +149,12 @@ export function patchHtml(
   at?: { repo: string; rev: string },
   ctx?: Context,
 ): string {
+  if (f.status === "conflict") {
+    return (
+      `<div class="detail-empty">Both sides have changed this file, differently. ` +
+      `A merge would stop here for it to be resolved by hand.</div>`
+    );
+  }
   if (f.binary) {
     // A deleted file is not at this revision to be read.
     if (f.image && at && f.status !== "deleted") {

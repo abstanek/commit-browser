@@ -1,5 +1,5 @@
 import { backend } from "@backend";
-import type { FileDiff, RefLabel, ReviewCommit, ReviewResult } from "./api";
+import type { FileDiff, MergePreview, RefLabel, ReviewCommit, ReviewResult } from "./api";
 import { statsHtml, STATUS_LETTER } from "./diff";
 import { createDiffPane } from "./diffpane";
 import { createDropdown } from "./dropdown";
@@ -10,6 +10,9 @@ import { $, escapeHtml, formatDate, shortRef, toast } from "./util";
 /// commits that make it up.
 
 const ALL = "all";
+/// Shown in place of a commit id: what merging the branch would change on the
+/// target as it stands now, rather than what the branch did since it left.
+const MERGE = "merge";
 
 interface ReviewState {
   /// Repository this comparison belongs to, for keying stored state.
@@ -17,6 +20,8 @@ interface ReviewState {
   base: string | null;
   head: string | null;
   result: ReviewResult | null;
+  /// Fetched the first time it is asked for, and dropped with the comparison.
+  merge: MergePreview | null;
   /// Commit id whose own diff is shown, or ALL for the whole branch.
   showing: string;
   /// Full message of that commit, once fetched with its diff.
@@ -37,6 +42,7 @@ const rs: ReviewState = {
   base: null,
   head: null,
   result: null,
+  merge: null,
   showing: ALL,
   message: null,
   expanded: localStorage.getItem("reviewMessageExpanded") === "1",
@@ -56,6 +62,7 @@ const el = {
   pickerCurrent: $("commit-picker-current"),
   pickerMenu: $("commit-picker-menu"),
   pickerList: $("commit-picker-list"),
+  mergeButton: $<HTMLButtonElement>("merge-preview"),
   prev: $<HTMLButtonElement>("commit-prev"),
   next: $<HTMLButtonElement>("commit-next"),
   tree: $("review-tree"),
@@ -189,8 +196,10 @@ function renderSummary(): void {
     el.summary.innerHTML = "";
     return;
   }
-  const adds = r.files.reduce((n, f) => n + f.additions, 0);
-  const dels = r.files.reduce((n, f) => n + f.deletions, 0);
+  const merging = rs.showing === MERGE ? rs.merge : null;
+  const files = merging ? merging.files : r.files;
+  const adds = files.reduce((n, f) => n + f.additions, 0);
+  const dels = files.reduce((n, f) => n + f.deletions, 0);
   const commits = `${r.commits.length}${r.commits_truncated ? "+" : ""} commit${
     r.commits.length === 1 ? "" : "s"
   }`;
@@ -201,9 +210,12 @@ function renderSummary(): void {
     `<span class="chip local">${escapeHtml(shortRef(rs.base!))}</span>` +
     `</span>` +
     `<span class="review-stat">${commits}</span>` +
-    `<span class="review-stat">${r.files.length} file${r.files.length === 1 ? "" : "s"}</span>` +
+    `<span class="review-stat">${files.length} file${files.length === 1 ? "" : "s"}</span>` +
     `<span class="review-stat"><span class="filestat add">+${adds}</span>` +
     `<span class="filestat del">−${dels}</span></span>` +
+    (merging?.conflicts
+      ? `<span class="review-stat warn">${merging.conflicts} conflict${merging.conflicts === 1 ? "" : "s"}</span>`
+      : "") +
     (r.behind
       ? `<span class="review-stat dim">${r.behind} behind</span>`
       : "") +
@@ -216,7 +228,14 @@ function renderSummary(): void {
 /// first. Unlike the graph, a branch is reviewed in the order it was written,
 /// so stepping forward moves to the newer commit.
 function choices(): string[] {
-  return [ALL, ...[...(rs.result?.commits ?? [])].reverse().map((c) => c.id)];
+  return [ALL, MERGE, ...[...(rs.result?.commits ?? [])].reverse().map((c) => c.id)];
+}
+
+/// What the arrows walk: the whole branch and then its commits. The merge
+/// preview is not a place along the branch, so stepping treats it as the
+/// whole branch it stands beside.
+function steps(): string[] {
+  return choices().filter((c) => c !== MERGE);
 }
 
 /// The refs on a commit worth pointing out. Every row is on the branch under
@@ -236,6 +255,7 @@ function chipsHtml(c: ReviewCommit): string {
 
 function renderCommitSelect(): void {
   const r = rs.result;
+  el.mergeButton.hidden = !r;
   if (!r) {
     el.pickerList.innerHTML = "";
     el.nav.hidden = true;
@@ -261,16 +281,20 @@ function renderCommitSelect(): void {
     `<span class="commit-summary">${escapeHtml(c.summary)}</span>${chipsHtml(c)}`;
   el.pickerList.innerHTML = [
     row(ALL, "All changes", `The whole branch, ${r.commits.length} commits`),
+    row(MERGE, "Preview merge", `What merging into ${escapeHtml(shortRef(rs.base!))} would change now`),
     ...[...r.commits]
       .reverse()
       .map((c) => row(c.id, line(c), `${escapeHtml(c.author)}, ${formatDate(c.time)}`)),
   ].join("");
 
   const shown = r.commits.find((c) => c.id === rs.showing);
-  el.pickerCurrent.innerHTML = shown ? line(shown) : escapeHtml(all);
-  const i = choices().indexOf(rs.showing);
+  el.pickerCurrent.innerHTML = shown
+    ? line(shown)
+    : escapeHtml(rs.showing === MERGE ? "Preview merge" : all);
+  el.mergeButton.classList.toggle("active", rs.showing === MERGE);
+  const i = steps().indexOf(rs.showing === MERGE ? ALL : rs.showing);
   el.prev.disabled = i <= 0;
-  el.next.disabled = i < 0 || i >= choices().length - 1;
+  el.next.disabled = i < 0 || i >= steps().length - 1;
 }
 
 function renderTree(): void {
@@ -290,6 +314,11 @@ function renderTree(): void {
 /// Why the diff pane has nothing to show.
 function emptyReason(): string {
   if (!rs.result) return rs.empty;
+  if (rs.showing === MERGE) {
+    return rs.merge
+      ? `Merging would change nothing: everything this branch does is already in ${shortRef(rs.base!)}.`
+      : "";
+  }
   return rs.result.commits.length === 0
     ? "Nothing to merge: this branch is already contained in the target."
     : "This commit changes no files.";
@@ -332,13 +361,19 @@ function render(): void {
   renderMessage();
   renderTree();
   // Folds belong to one comparison and one commit within it.
-  pane.show(rs.files, emptyReason(), {
-    scope: `${rs.repo}|${rs.base}..${rs.head}|${rs.showing}`,
-    repo: rs.repo,
-    // The same revision the file links open at: one commit's own version,
-    // or the branch tip when the whole branch is in view.
-    rev: (rs.showing === ALL ? rs.head : rs.showing) ?? "",
-  });
+  // The merge preview's result is no commit, so there is nowhere to read more
+  // of a file from: no lines let in around a hunk, and no image drawn.
+  const at =
+    rs.showing === MERGE
+      ? undefined
+      : {
+          scope: `${rs.repo}|${rs.base}..${rs.head}|${rs.showing}`,
+          repo: rs.repo,
+          // The same revision the file links open at: one commit's own version,
+          // or the branch tip when the whole branch is in view.
+          rev: (rs.showing === ALL ? rs.head : rs.showing) ?? "",
+        };
+  pane.show(rs.files, emptyReason(), at);
 }
 
 // --------------------------------------------------------------------- state
@@ -350,6 +385,14 @@ async function showCommit(id: string): Promise<void> {
   rs.message = null;
   if (id === ALL) {
     rs.files = inTreeOrder(rs.result?.files ?? []);
+  } else if (id === MERGE) {
+    try {
+      rs.merge ??= await backend.getMergePreview(rs.repo, rs.base!, rs.head!);
+      rs.files = inTreeOrder(rs.merge.files);
+    } catch (e) {
+      toast(`Could not preview the merge: ${e}`);
+      rs.files = [];
+    }
   } else {
     try {
       const details = await backend.getCommitDetails(rs.repo, id);
@@ -385,6 +428,7 @@ export async function load(
   rs.repo = repo;
   rs.base = base;
   rs.head = head;
+  rs.merge = null;
   try {
     rs.result = await backend.getReview(repo, base, head);
   } catch (e) {
@@ -402,11 +446,15 @@ export async function load(
   // leave the reader where they were. Either is dropped if this comparison no
   // longer holds it, as is the marker for the whole branch.
   const asked = showing ?? rs.showing;
-  const wanted = only ?? (rs.result.commits.some((c) => c.id === asked) ? asked : ALL);
+  const wanted =
+    asked === MERGE
+      ? MERGE
+      : (only ?? (rs.result.commits.some((c) => c.id === asked) ? asked : ALL));
   await showCommit(wanted);
 }
 
 export function clear(why: string): void {
+  rs.merge = null;
   rs.base = null;
   rs.head = null;
   rs.result = null;
@@ -442,8 +490,8 @@ function select(i: number): void {
 }
 
 function step(delta: number): void {
-  const all = choices();
-  const i = all.indexOf(rs.showing) + delta;
+  const all = steps();
+  const i = all.indexOf(rs.showing === MERGE ? ALL : rs.showing) + delta;
   if (i < 0 || i >= all.length) return;
   void showCommit(all[i]).then(navigated);
 }
@@ -459,7 +507,8 @@ let showInGraph: (id: string) => void = () => {};
 /// the file, or the branch tip when the whole branch is in view.
 export function onOpenFile(cb: (rev: string, path: string) => void): void {
   pane.onOpenFile((path) => {
-    const rev = rs.showing === ALL ? rs.head : rs.showing;
+    // The preview's result is no commit; the branch's own version will do.
+    const rev = rs.showing === ALL || rs.showing === MERGE ? rs.head : rs.showing;
     if (rev) cb(rev, path);
   });
 }
@@ -467,7 +516,7 @@ export function onOpenFile(cb: (rev: string, path: string) => void): void {
 export function wire(): void {
   el.message.addEventListener("click", (ev) => {
     if ((ev.target as HTMLElement).closest(".in-graph")) {
-      if (rs.showing !== ALL) showInGraph(rs.showing);
+      if (rs.showing !== ALL && rs.showing !== MERGE) showInGraph(rs.showing);
       return;
     }
     if (!(ev.target as HTMLElement).closest(".msg-toggle")) return;
@@ -494,6 +543,9 @@ export function wire(): void {
       void showCommit(option.dataset.commit!).then(navigated);
     }
   });
+  el.mergeButton.addEventListener("click", () =>
+    void showCommit(rs.showing === MERGE ? ALL : MERGE).then(navigated),
+  );
   el.prev.addEventListener("click", () => step(-1));
   el.next.addEventListener("click", () => step(1));
 

@@ -857,6 +857,7 @@ body {
 .status.deleted { background: #cf222e; }
 .status.renamed { background: #8250df; }
 .status.typechange { background: #57606a; }
+.status.conflict { background: #c2410c; }
 
 .filestat {
   font-size: 0.85rem;
@@ -864,6 +865,11 @@ body {
 }
 
 .filestat.add { color: var(--stat-add); }
+.filestat.conflict {
+  color: var(--stat-del);
+  font-weight: 600;
+}
+
 .filestat.del { color: var(--stat-del); }
 
 /* The diff panes stack one section per file and scroll through them; blocks
@@ -1080,8 +1086,13 @@ body {
   gap: 4px;
 }
 
-#review-nav .btn {
+#review-nav .btn,
+#merge-preview {
   padding: 4px 8px;
+}
+
+#merge-preview {
+  flex: none;
 }
 
 #review-nav .btn:disabled {
