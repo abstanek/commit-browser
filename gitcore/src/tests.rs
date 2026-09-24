@@ -520,3 +520,68 @@ fn review_names_the_branches_on_its_commits() {
     assert_eq!(names(first), ["spinoff"]);
     assert_eq!(names(second), ["work"]);
 }
+
+/// Two lines of history from one root: `main` and a branch off it, each given
+/// its own edits, for merging one into the other in memory.
+fn diverged(main_edit: &str, branch_edit: &str) -> (TestRepo, Oid, Oid) {
+    let mut t = TestRepo::new();
+    let root = t.commit("main", &[], &[("f.txt", "one\ntwo\nthree\n")]);
+    let branch = t.commit("work", &[root], &[("f.txt", branch_edit)]);
+    let main = t.commit("main", &[root], &[("f.txt", main_edit)]);
+    (t, main, branch)
+}
+
+#[test]
+fn merging_work_that_already_arrived_changes_nothing() {
+    // main took the branch's exact edit some other way - a rebase, a squash.
+    let (t, _, _) = diverged("one\ntwo\nthree\nfour\n", "one\ntwo\nthree\nfour\n");
+    let p = merge_preview(&t.path, "refs/heads/main", "refs/heads/work").unwrap();
+    assert!(p.files.is_empty(), "{:?}", p.files);
+    assert_eq!(p.conflicts, 0);
+}
+
+#[test]
+fn merging_a_drifted_copy_conflicts() {
+    // Both sides rewrote the same line, differently.
+    let (t, _, _) = diverged("one\ntwo\nTHREE\n", "one\ntwo\n3\n");
+    let p = merge_preview(&t.path, "refs/heads/main", "refs/heads/work").unwrap();
+    assert_eq!(p.conflicts, 1);
+    assert_eq!(p.files.len(), 1);
+    assert_eq!(p.files[0].path, "f.txt");
+    assert_eq!(p.files[0].status, "conflict");
+    assert!(
+        p.files[0].patch.is_empty(),
+        "a conflict has no one patch to show"
+    );
+}
+
+#[test]
+fn a_clean_merge_shows_only_what_the_branch_brings() {
+    // main changed the top of the file, the branch the bottom.
+    let (t, main, _) = diverged("ONE\ntwo\nthree\n", "one\ntwo\nthree\nfour\n");
+    let p = merge_preview(&t.path, "refs/heads/main", "refs/heads/work").unwrap();
+    assert_eq!(p.base_id, main.to_string());
+    assert_eq!(p.conflicts, 0);
+    assert_eq!(p.files.len(), 1);
+    assert_eq!(p.files[0].status, "modified");
+    // The branch's line arrives; main's own edit is context, not a change.
+    let changed: Vec<&str> = p.files[0]
+        .patch
+        .lines()
+        .filter(|l| {
+            (l.starts_with('+') || l.starts_with('-'))
+                && !l.starts_with("+++")
+                && !l.starts_with("---")
+        })
+        .collect();
+    assert_eq!(changed, ["+four"]);
+}
+
+#[test]
+fn merging_unrelated_histories_is_refused() {
+    let mut t = TestRepo::new();
+    t.commit("main", &[], &[("a.txt", "a\n")]);
+    t.commit("other", &[], &[("b.txt", "b\n")]);
+    let err = merge_preview(&t.path, "refs/heads/main", "refs/heads/other").unwrap_err();
+    assert!(err.contains("no history"), "{err}");
+}
