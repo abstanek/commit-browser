@@ -531,11 +531,20 @@ fn diff_files(
     old_tree: Option<&git2::Tree>,
     new_tree: Option<&git2::Tree>,
 ) -> Result<Vec<FileDiff>> {
+    let diff = repo
+        .diff_tree_to_tree(old_tree, new_tree, Some(&mut diff_options()))
+        .map_err(err)?;
+    files_of(repo, diff)
+}
+
+fn diff_options() -> DiffOptions {
     let mut opts = DiffOptions::new();
     opts.context_lines(3);
-    let mut diff: Diff = repo
-        .diff_tree_to_tree(old_tree, new_tree, Some(&mut opts))
-        .map_err(err)?;
+    opts
+}
+
+/// Per-file patches of a diff, however it was made, with renames found.
+fn files_of(repo: &Repository, mut diff: Diff) -> Result<Vec<FileDiff>> {
     let mut find_opts = git2::DiffFindOptions::new();
     find_opts.renames(true);
     let _ = diff.find_similar(Some(&mut find_opts));
