@@ -391,6 +391,12 @@ body {
 
 /* ------------------------------------------------------------------ sidebar */
 
+.ref-empty {
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
 #sidebar {
   grid-area: sidebar;
   background: var(--bg-sidebar);
@@ -407,7 +413,8 @@ body {
   color: var(--text-dim);
 }
 
-.sidebar-controls select {
+.sidebar-controls select,
+.sidebar-controls input {
   flex: 1;
   font: inherit;
   font-size: 0.92rem;

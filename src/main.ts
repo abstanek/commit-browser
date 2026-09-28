@@ -60,6 +60,8 @@ const el = {
   modeReview: $("mode-review"),
   modeFiles: $("mode-files"),
   baseControls: $("base-controls"),
+  filterControls: $("filter-controls"),
+  branchFilter: $<HTMLInputElement>("branch-filter"),
   baseRef: $<HTMLSelectElement>("base-ref"),
   openRepoEmpty: $("open-repo-empty"),
   refresh: $("refresh"),
@@ -298,16 +300,28 @@ function collapsedRemotes(): Set<string> {
   return new Set(state.repoPath ? store.collapsedFor(state.repoPath) : []);
 }
 
+/// The review's branch filter, which only that mode offers: the graph's list
+/// has "all" and "none" buttons whose meaning a filter would muddy.
+function branchFilter(): string {
+  return state.mode === "review" ? el.branchFilter.value.trim().toLowerCase() : "";
+}
+
 function renderSidebar(): void {
   if (!state.refs) return;
   const head = state.refs.head_branch;
-  el.localBranches.innerHTML = sortBranches(state.refs.locals)
-    .map((b) => refItemHtml(b, b.name, head !== null && b.name === head))
-    .join("");
+  const filter = branchFilter();
+  const shown = (b: BranchInfo): boolean => !filter || b.name.toLowerCase().includes(filter);
+  const locals = sortBranches(state.refs.locals.filter(shown));
+  el.localBranches.innerHTML = locals.length
+    ? locals.map((b) => refItemHtml(b, b.name, head !== null && b.name === head)).join("")
+    : filter
+      ? `<div class="ref-empty">No branch matches</div>`
+      : "";
 
-  // Remote branches grouped by remote; sort applies within each group.
+  // Remote branches grouped by remote; sort applies within each group. A
+  // remote with nothing left after filtering is not shown at all.
   const groups = new Map<string, BranchInfo[]>();
-  for (const b of state.refs.remotes) {
+  for (const b of state.refs.remotes.filter(shown)) {
     const remote = b.remote ?? "(unknown)";
     let g = groups.get(remote);
     if (!g) groups.set(remote, (g = []));
@@ -606,6 +620,7 @@ function setMode(mode: Mode, load = true): void {
   el.modeFiles.classList.toggle("active", mode === "files");
   el.main.hidden = !graphing;
   el.baseControls.hidden = mode !== "review";
+  el.filterControls.hidden = mode !== "review";
   el.toggleDetails.hidden = !graphing;
   review.setVisible(mode === "review");
   files.setVisible(mode === "files");
@@ -965,6 +980,12 @@ function wire(): void {
   repopicker.onSelect((repo) => void openRepo(repo, true));
   repopicker.onAdd(() => void addRepo());
   repopicker.onRemove((repo) => void removeRepo(repo));
+  el.branchFilter.addEventListener("input", renderSidebar);
+  el.branchFilter.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    el.branchFilter.value = "";
+    renderSidebar();
+  });
   el.refresh.addEventListener("click", () => void refreshAll());
   el.loadMore.addEventListener("click", () => {
     state.limit += PAGE;
