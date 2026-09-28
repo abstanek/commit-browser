@@ -1084,6 +1084,8 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 #review-nav .btn,
@@ -1107,13 +1109,20 @@ body {
   min-width: 0;
 }
 
+/* One width whatever is chosen, so the arrows either side stay put when the
+   choice changes; the summary gives way inside it. Only a window too narrow
+   to hold it makes it smaller. */
+#commit-picker-button {
+  width: 30rem;
+  max-width: 100%;
+}
+
 #commit-picker-button {
   font: inherit;
   font-size: 0.92rem;
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 32rem;
   color: var(--text);
   background: var(--btn-bg);
   border: 1px solid var(--border);
@@ -1133,6 +1142,10 @@ body {
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+#commit-picker-current {
+  flex: 1;
 }
 
 #commit-picker .sha {
