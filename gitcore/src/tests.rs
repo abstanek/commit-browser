@@ -585,3 +585,40 @@ fn merging_unrelated_histories_is_refused() {
     let err = merge_preview(&t.path, "refs/heads/main", "refs/heads/other").unwrap_err();
     assert!(err.contains("no history"), "{err}");
 }
+
+#[test]
+fn a_commit_is_found_with_the_branches_that_hold_it() {
+    let (t, oids) = sample();
+    let [_a, b, c, topic, m, f] = oids[..] else {
+        panic!()
+    };
+    // b is on main (through the merge) and on topic, but not on feature.
+    let found = find_commit(&t.path, &b.to_string()).unwrap();
+    assert_eq!(found.id, b.to_string());
+    let mut branches = found.branches;
+    branches.sort();
+    assert_eq!(branches, ["refs/heads/main", "refs/heads/topic"]);
+    // The branch tip itself counts as on the branch.
+    assert_eq!(
+        find_commit(&t.path, &topic.to_string()).unwrap().branches,
+        ["refs/heads/topic"]
+    );
+    // feature's commit reached main through the merge.
+    let mut on_c = find_commit(&t.path, &c.to_string()).unwrap().branches;
+    on_c.sort();
+    assert_eq!(on_c, ["refs/heads/feature", "refs/heads/main"]);
+    let _ = (m, f);
+}
+
+#[test]
+fn a_commit_is_found_by_an_abbreviated_id() {
+    let (t, oids) = sample();
+    let full = oids[1].to_string();
+    assert_eq!(find_commit(&t.path, &full[..7]).unwrap().id, full);
+}
+
+#[test]
+fn an_unknown_commit_is_an_error() {
+    let (t, _) = sample();
+    assert!(find_commit(&t.path, "0123456789abcdef").is_err());
+}
