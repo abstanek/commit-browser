@@ -162,6 +162,14 @@ pub struct MergePreview {
     pub conflicts: usize,
 }
 
+/// Where a commit can be found: its full id, and every branch whose history
+/// holds it, by full ref name.
+#[derive(Serialize, Debug)]
+pub struct CommitLocation {
+    pub id: String,
+    pub branches: Vec<String>,
+}
+
 #[derive(Serialize, Debug)]
 pub struct ReviewResult {
     pub base_id: String,
@@ -742,6 +750,40 @@ pub fn review(repo_path: &str, base: &str, head: &str) -> Result<ReviewResult> {
         commits_truncated,
         behind,
         files,
+    })
+}
+
+/// Resolve `rev` - an id, abbreviated or not, or any name git accepts - to a
+/// commit, and name the branches it is reachable from. A commit on no branch
+/// comes back with an empty list rather than an error: it exists, the graph
+/// cannot draw it.
+pub fn find_commit(repo_path: &str, rev: &str) -> Result<CommitLocation> {
+    let repo = Repository::open(repo_path).map_err(err)?;
+    let commit = resolve_commit(&repo, rev)?;
+    let id = commit.id();
+    let mut branches = Vec::new();
+    let refs = repo.references().map_err(err)?;
+    for r in refs.flatten() {
+        let Ok(full) = r.name().map(str::to_string) else {
+            continue;
+        };
+        if !(full.starts_with("refs/heads/") || full.starts_with("refs/remotes/")) {
+            continue;
+        }
+        if full.ends_with("/HEAD") {
+            continue;
+        }
+        let Ok(tip) = r.peel_to_commit() else {
+            continue;
+        };
+        let holds = tip.id() == id || repo.graph_descendant_of(tip.id(), id).unwrap_or(false);
+        if holds {
+            branches.push(full);
+        }
+    }
+    Ok(CommitLocation {
+        id: id.to_string(),
+        branches,
     })
 }
 
