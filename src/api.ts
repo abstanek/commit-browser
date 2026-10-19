@@ -130,6 +130,13 @@ export interface MergePreview {
   conflicts: number;
 }
 
+/// Where a commit can be found: its full id and the branches, by full ref
+/// name, whose history holds it.
+export interface CommitLocation {
+  id: string;
+  branches: string[];
+}
+
 export interface TreeEntry {
   name: string;
   path: string;
@@ -185,6 +192,9 @@ export interface Backend {
   getReview(repo: string, base: string, head: string): Promise<ReviewResult>;
   /// What merging `head` into `base` would change on `base` as it stands now.
   getMergePreview(repo: string, base: string, head: string): Promise<MergePreview>;
+  /// Resolve an id, abbreviated or not, to a commit and the branches holding it.
+  /// Rejects when nothing in the repository answers to `rev`.
+  findCommit(repo: string, rev: string): Promise<CommitLocation>;
   /// One directory of the tree at `rev`; empty `path` is the root.
   listTree(repo: string, rev: string, path: string): Promise<TreeResult>;
   readFile(repo: string, rev: string, path: string): Promise<FileContent>;

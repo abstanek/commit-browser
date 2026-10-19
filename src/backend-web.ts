@@ -1,6 +1,7 @@
 import type {
   Backend,
   CommitDetails,
+  CommitLocation,
   CommitMeta,
   FileContent,
   GraphResult,
@@ -49,6 +50,7 @@ export const backend: Backend = {
     get<ReviewResult>(`review?${new URLSearchParams({ repo, base, head })}`),
   getMergePreview: (repo, base, head) =>
     get<MergePreview>(`merge?${new URLSearchParams({ repo, base, head })}`),
+  findCommit: (repo, rev) => get<CommitLocation>(`find?${new URLSearchParams({ repo, rev })}`),
   listTree: (repo, rev, path) =>
     get<TreeResult>(`tree?${new URLSearchParams({ repo, rev, path })}`),
   readFile: (repo, rev, path) =>

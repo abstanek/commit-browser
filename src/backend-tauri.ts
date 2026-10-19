@@ -3,6 +3,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type {
   Backend,
   CommitDetails,
+  CommitLocation,
   CommitMeta,
   FileContent,
   GraphResult,
@@ -56,6 +57,7 @@ export const backend: Backend = {
   getReview: (repo, base, head) => invoke<ReviewResult>("get_review", { repo, base, head }),
   getMergePreview: (repo, base, head) =>
     invoke<MergePreview>("get_merge_preview", { repo, base, head }),
+  findCommit: (repo, rev) => invoke<CommitLocation>("find_commit", { repo, rev }),
   listTree: (repo, rev, path) => invoke<TreeResult>("list_tree", { repo, rev, path }),
   readFile: (repo, rev, path) => invoke<FileContent>("read_file", { repo, rev, path }),
   readImage: (repo, rev, path) => invoke<ImageContent>("read_image", { repo, rev, path }),

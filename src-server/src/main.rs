@@ -178,6 +178,20 @@ async fn merge(
 }
 
 #[derive(serde::Deserialize)]
+struct FindParams {
+    rev: String,
+    repo: Option<String>,
+}
+
+async fn find(
+    State(s): State<Arc<AppState>>,
+    Query(p): Query<FindParams>,
+) -> Result<Json<gitcore::CommitLocation>, ApiError> {
+    let dir = s.git_dir(p.repo.as_deref())?;
+    blocking(move || gitcore::find_commit(&dir, &p.rev)).await
+}
+
+#[derive(serde::Deserialize)]
 struct PathParams {
     rev: String,
     /// Empty for the root of the tree.
@@ -359,6 +373,7 @@ fn api_router() -> Router<Arc<AppState>> {
         .route("/api/graph", get(graph))
         .route("/api/review", get(review))
         .route("/api/merge", get(merge))
+        .route("/api/find", get(find))
         .route("/api/tree", get(tree))
         .route("/api/file", get(file))
         .route("/api/image", get(image))
