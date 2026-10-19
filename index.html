@@ -48,6 +48,10 @@
           </div>
         </div>
         <div class="spacer"></div>
+        <input id="commit-search" type="search" placeholder="Commit SHA" autocomplete="off" spellcheck="false" title="Show this commit in the graph. Enter to search, Escape to close." hidden />
+        <button id="search-toggle" class="btn" title="Find a commit by its SHA" aria-label="Find a commit by its SHA">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l4.5 4.5"/></svg>
+        </button>
         <div class="segmented" role="group">
           <button id="font-smaller" class="btn" title="Smaller text">A−</button>
           <button id="font-bigger" class="btn" title="Larger text">A+</button>

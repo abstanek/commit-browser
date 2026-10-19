@@ -185,6 +185,25 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+#search-toggle {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+}
+
+#commit-search {
+  font: inherit;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.92rem;
+  width: 24rem;
+  max-width: 40vw;
+  color: var(--text);
+  background: var(--btn-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 8px;
+}
+
 /* The repository selector: a two-line button over a two-line-per-row listbox,
    since a name alone does not tell two checkouts apart and a path alone is too
    long to read at a glance. */

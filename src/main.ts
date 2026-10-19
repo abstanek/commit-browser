@@ -65,6 +65,8 @@ const el = {
   baseRef: $<HTMLSelectElement>("base-ref"),
   openRepoEmpty: $("open-repo-empty"),
   refresh: $("refresh"),
+  searchToggle: $("search-toggle"),
+  commitSearch: $<HTMLInputElement>("commit-search"),
   toggleDetails: $("toggle-details"),
   themeToggle: $("theme-toggle"),
   fontSmaller: $<HTMLButtonElement>("font-smaller"),
@@ -506,6 +508,43 @@ async function openInGraph(id: string): Promise<void> {
   await refreshGraph();
   // Replaces the entry setMode just recorded, so the move is one step back.
   await jumpToCommit(id, true);
+}
+
+/// Show the commit `rev` names in the graph. The graph only draws what its
+/// enabled branches reach, so a commit on none of them needs one turned on:
+/// of the branches that hold it, the one whose tip is most recent.
+async function searchCommit(rev: string): Promise<void> {
+  if (!state.repoPath || !state.refs) return;
+  let found;
+  try {
+    found = await backend.findCommit(state.repoPath, rev);
+  } catch {
+    toast(`No commit matches ${rev}`);
+    return;
+  }
+  if (!found.branches.length) {
+    toast(`${found.id.slice(0, 7)} is on no branch, so the graph cannot show it`);
+    return;
+  }
+  let changed = false;
+  if (!found.branches.some((b) => state.enabled.has(b))) {
+    const tips = new Map(
+      [...state.refs.locals, ...state.refs.remotes].map((b) => [b.full_name, b.tip_time]),
+    );
+    const newest = found.branches.reduce((best, b) =>
+      (tips.get(b) ?? 0) > (tips.get(best) ?? 0) ? b : best,
+    );
+    state.enabled.add(newest);
+    persistEnabled();
+    renderSidebar();
+    changed = true;
+  }
+  const switching = state.mode !== "graph";
+  if (switching) setMode("graph");
+  if (changed || switching) await refreshGraph();
+  // Replaces the entry setMode recorded, so the move is one step back.
+  await jumpToCommit(found.id, switching);
+  el.commitSearch.hidden = true;
 }
 
 /// Follow a diff's file into the files view, at the revision it was read from.
@@ -985,6 +1024,25 @@ function wire(): void {
     if (e.key !== "Escape") return;
     el.branchFilter.value = "";
     renderSidebar();
+  });
+  el.searchToggle.addEventListener("click", () => {
+    el.commitSearch.hidden = !el.commitSearch.hidden;
+    if (!el.commitSearch.hidden) {
+      el.commitSearch.select();
+      el.commitSearch.focus();
+    }
+  });
+  el.commitSearch.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const rev = el.commitSearch.value.trim();
+      if (rev) void searchCommit(rev);
+    } else if (e.key === "Escape") {
+      el.commitSearch.hidden = true;
+      el.searchToggle.focus();
+    } else {
+      return;
+    }
+    e.stopPropagation();
   });
   el.refresh.addEventListener("click", () => void refreshAll());
   el.loadMore.addEventListener("click", () => {

@@ -30,6 +30,10 @@ Images appear in place, both in a diff and in the files view. Anything over
 desktop build has no URL to point at, and that is a slow thing to spend on a
 picture nobody asked to see.
 
+The magnifying glass in the toolbar finds a commit by its SHA, abbreviated
+or not, and shows it in the graph. If no branch on screen holds the commit,
+the branch with the most recent tip that does is turned on first.
+
 Several repositories can be to hand, one browsed at a time. The selector at the
 top left lists them by name over path, since a name alone does not tell two
 checkouts apart; picking one is a move like any other, so back and forward walk
