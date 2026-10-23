@@ -1212,10 +1212,17 @@ body {
   border-bottom: none;
 }
 
+/* The commit's own line reads larger than the diff under it. Everything on
+   it is sized in em from here, so the buttons and the toggle grow with it. */
 .message-line {
   display: flex;
   align-items: baseline;
   gap: 10px;
+  font-size: calc(1rem + 3pt);
+}
+
+.message-line .linkbtn {
+  font-size: inherit;
 }
 
 .msg-toggle {
@@ -1224,7 +1231,7 @@ body {
   background: none;
   padding: 0;
   font: inherit;
-  font-size: 0.77rem;
+  font-size: 0.77em;
   color: var(--text-dim);
   cursor: pointer;
 }
@@ -1257,6 +1264,9 @@ body {
 
 .iconbtn {
   display: inline-flex;
+  /* A button does not take its font from its line by default, and the icon
+     is sized in em of it. */
+  font: inherit;
   padding: 2px;
   border: none;
   border-radius: 3px;
@@ -1266,8 +1276,8 @@ body {
 }
 
 .iconbtn svg {
-  width: 14px;
-  height: 14px;
+  width: 1.1em;
+  height: 1.1em;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.4;
