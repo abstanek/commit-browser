@@ -3,7 +3,7 @@ import type { FileDiff, MergePreview, RefLabel, ReviewCommit, ReviewResult } fro
 import { statsHtml, STATUS_LETTER } from "./diff";
 import { createDiffPane } from "./diffpane";
 import { createDropdown } from "./dropdown";
-import { $, escapeHtml, formatDate, shortRef, toast } from "./util";
+import { $, copyText, escapeHtml, formatDate, shortRef, toast } from "./util";
 
 /// Pull-request style view: the whole of one branch measured against the
 /// branch it would merge into, with the option to step through the individual
@@ -342,6 +342,14 @@ function renderMessage(): void {
   el.message.innerHTML =
     `<div class="message-line">` +
     `<span class="sha">${c.short_id}</span>` +
+    `<span class="sha-actions">` +
+    `<button class="iconbtn copy-sha" title="Copy ${c.short_id}">` +
+    `<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/>` +
+    `<path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg></button>` +
+    `<button class="iconbtn copy-pick" title="Copy: git cherry-pick ${c.short_id}">` +
+    `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 3.5h-3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3"/>` +
+    `<path d="M9.5 2.5h4v4M13.5 2.5l-6 6"/></svg></button>` +
+    `</span>` +
     (hasMore || open
       ? `<button class="msg-toggle" title="${open ? "Show just the summary" : "Show the whole message"}">` +
         `${open ? "▾" : "▸"}</button>`
@@ -515,6 +523,16 @@ export function onOpenFile(cb: (rev: string, path: string) => void): void {
 
 export function wire(): void {
   el.message.addEventListener("click", (ev) => {
+    const target = ev.target as HTMLElement;
+    const shown = rs.result?.commits.find((x) => x.id === rs.showing);
+    if (shown && target.closest(".copy-sha")) {
+      void copyText(shown.short_id);
+      return;
+    }
+    if (shown && target.closest(".copy-pick")) {
+      void copyText(`git cherry-pick ${shown.short_id}`);
+      return;
+    }
     if ((ev.target as HTMLElement).closest(".in-graph")) {
       if (rs.showing !== ALL && rs.showing !== MERGE) showInGraph(rs.showing);
       return;

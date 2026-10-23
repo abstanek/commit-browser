@@ -41,3 +41,27 @@ export function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} K`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} M`;
 }
+
+/// Put `text` on the clipboard and say so. Falls back to the selection-based
+/// copy for a webview that has no clipboard API, and reports either failing.
+export async function copyText(text: string): Promise<void> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const holder = document.createElement("textarea");
+      holder.value = text;
+      holder.setAttribute("readonly", "");
+      holder.style.position = "fixed";
+      holder.style.opacity = "0";
+      document.body.appendChild(holder);
+      holder.select();
+      const ok = document.execCommand("copy");
+      holder.remove();
+      if (!ok) throw new Error("the copy command was refused");
+    }
+    toast(`Copied ${text}`);
+  } catch (e) {
+    toast(`Could not copy: ${e}`);
+  }
+}

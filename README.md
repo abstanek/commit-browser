@@ -14,7 +14,8 @@ Three views, switched from the toolbar:
   sitting on one of them. Preview merge shows instead what merging would
   change on the target as it stands now: a branch whose work already arrived
   some other way - rebased, squashed, cherry-picked - changes nothing, and
-  a copy that has drifted from what landed shows its conflicts. Fold a hunk
+  a copy that has drifted from what landed shows its conflicts. Beside a
+  commit's id are buttons to copy it, or a `git cherry-pick` of it. Fold a hunk
   with the arrow on its `@@` header, or drag down the lines to fold just that
   group; folds are remembered per comparison. In any diff, a hunk offers more
   of the file above and below it, twenty lines at a press

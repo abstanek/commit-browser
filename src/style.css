@@ -1245,6 +1245,41 @@ body {
   color: var(--text-dim);
 }
 
+/* The two copy buttons beside the id: drawn, not typed, so no font is asked
+   for a glyph it may not have. They sit tight against each other and the id,
+   apart from the line's ordinary spacing. */
+.sha-actions {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: -6px;
+  align-self: center;
+}
+
+.iconbtn {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.iconbtn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.iconbtn:hover {
+  background: var(--btn-hover);
+  color: var(--accent);
+}
+
 #review-message .msg {
   font-weight: 600;
   overflow: hidden;
