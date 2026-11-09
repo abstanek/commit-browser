@@ -50,6 +50,10 @@ pub struct BranchInfo {
     pub tip_time: i64,
     /// For remote-tracking branches, the remote this branch belongs to.
     pub remote: Option<String>,
+    /// The working directory this branch is checked out in, if any: the
+    /// repository's own or one of its linked worktrees. A worktree with a
+    /// detached HEAD checks out no branch and is not counted.
+    pub checked_out: Option<String>,
 }
 
 #[derive(Serialize, Debug)]
@@ -306,8 +310,41 @@ pub fn scan_repos(dir: &str) -> Result<Vec<RepoInfo>> {
     Ok(found)
 }
 
+/// Which branch each working directory of the repository has checked out, by
+/// full ref name: the repository's own directory first, then every linked
+/// worktree that can be opened. Git does not let two worktrees check out one
+/// branch, so a branch appears at most once.
+fn checkouts(repo: &Repository) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let mut note = |r: &Repository| {
+        let Some(dir) = r.workdir() else { return };
+        let Ok(head) = r.head() else { return };
+        if !head.is_branch() {
+            return;
+        }
+        if let Ok(name) = head.name() {
+            let path = dir.to_string_lossy().trim_end_matches('/').to_string();
+            map.entry(name.to_string()).or_insert(path);
+        }
+    };
+    note(repo);
+    if let Ok(names) = repo.worktrees() {
+        for name in names.iter() {
+            let Ok(Some(name)) = name else { continue };
+            let Ok(wt) = repo.find_worktree(name) else {
+                continue;
+            };
+            if let Ok(linked) = Repository::open_from_worktree(&wt) {
+                note(&linked);
+            }
+        }
+    }
+    map
+}
+
 pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
     let repo = Repository::open(repo_path).map_err(err)?;
+    let checkouts = checkouts(&repo);
     let mut locals = Vec::new();
     let mut remotes = Vec::new();
     let remote_names: Vec<String> = repo
@@ -338,6 +375,7 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
                 target,
                 tip_time,
                 remote: None,
+                checked_out: checkouts.get(&full).cloned(),
             });
         } else if let Some(short) = full.strip_prefix("refs/remotes/") {
             // Match against configured remotes rather than splitting on "/",
@@ -356,6 +394,7 @@ pub fn list_refs(repo_path: &str) -> Result<RefsResult> {
                 target,
                 tip_time,
                 remote,
+                checked_out: None,
             });
         }
     }
