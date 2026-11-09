@@ -622,3 +622,60 @@ fn an_unknown_commit_is_an_error() {
     let (t, _) = sample();
     assert!(find_commit(&t.path, "0123456789abcdef").is_err());
 }
+
+#[test]
+fn a_branch_says_where_it_is_checked_out() {
+    let mut t = TestRepo::new();
+    let root = t.commit("main", &[], &[("f.txt", "a\n")]);
+    t.commit("work", &[root], &[("f.txt", "b\n")]);
+    t.commit("idle", &[root], &[("f.txt", "c\n")]);
+    t.commit("loose", &[root], &[("f.txt", "d\n")]);
+    t.repo.set_head("refs/heads/main").unwrap();
+    t.repo
+        .checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+        .unwrap();
+    // Told which branch to check out, since without that git2 makes a new
+    // branch named after the worktree, and these names are taken.
+    let beside = TempDir::new().unwrap();
+    let work_dir = beside.path().join("work");
+    let work_ref = t.repo.find_reference("refs/heads/work").unwrap();
+    let mut on_work = git2::WorktreeAddOptions::new();
+    on_work.reference(Some(&work_ref));
+    t.repo.worktree("work", &work_dir, Some(&on_work)).unwrap();
+    // A worktree with a detached HEAD checks out no branch.
+    let loose_dir = beside.path().join("loose");
+    let loose_ref = t.repo.find_reference("refs/heads/loose").unwrap();
+    let mut on_loose = git2::WorktreeAddOptions::new();
+    on_loose.reference(Some(&loose_ref));
+    let wt = t
+        .repo
+        .worktree("loose", &loose_dir, Some(&on_loose))
+        .unwrap();
+    let detached = Repository::open_from_worktree(&wt).unwrap();
+    let tip = detached.head().unwrap().target().unwrap();
+    detached.set_head_detached(tip).unwrap();
+
+    let refs = list_refs(&t.path).unwrap();
+    let at = |name: &str| {
+        refs.locals
+            .iter()
+            .find(|b| b.name == name)
+            .unwrap()
+            .checked_out
+            .clone()
+    };
+    assert_eq!(
+        at("main").map(|p| std::fs::canonicalize(p).unwrap()),
+        Some(std::fs::canonicalize(t.repo.workdir().unwrap()).unwrap())
+    );
+    assert_eq!(
+        at("work").map(|p| std::fs::canonicalize(p).unwrap()),
+        Some(std::fs::canonicalize(&work_dir).unwrap())
+    );
+    assert_eq!(at("idle"), None, "checked out nowhere");
+    assert_eq!(
+        at("loose"),
+        None,
+        "its worktree is detached, which counts as nowhere"
+    );
+}
