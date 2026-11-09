@@ -275,11 +275,13 @@ function refItemHtml(b: BranchInfo, label: string, isHead: boolean): string {
     : `<input type="radio" name="ref-pick" data-ref="${escapeHtml(b.full_name)}" ${
         checked ? "checked" : ""
       }/>`;
+  const where = b.checked_out ? `Checked out in ${b.checked_out}` : null;
+  const title = where ? `${b.full_name}\n${where}` : b.full_name;
   return (
-    `<label class="ref-item${isHead ? " head" : ""}" title="${escapeHtml(b.full_name)}">` +
+    `<label class="ref-item${isHead ? " head" : ""}" title="${escapeHtml(title)}">` +
     input +
     `<span class="ref-name">${escapeHtml(label)}</span>` +
-    (isHead ? `<span class="head-dot" title="Current branch">●</span>` : "") +
+    (where ? `<span class="head-dot" title="${escapeHtml(where)}">●</span>` : "") +
     (checked && graphing
       ? `<button class="jump-btn" data-target="${b.target}" ` +
         `title="Jump to head of ${escapeHtml(b.name)}">⌖</button>`

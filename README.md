@@ -31,6 +31,11 @@ Images appear in place, both in a diff and in the files view. Anything over
 desktop build has no URL to point at, and that is a slow thing to spend on a
 picture nobody asked to see.
 
+A dot beside a branch in the sidebar means it is checked out somewhere: in the
+repository's own directory or in one of its worktrees. Hovering the branch
+names which. A worktree with a detached HEAD checks out no branch and is not
+counted.
+
 The magnifying glass in the toolbar finds a commit by its SHA, abbreviated
 or not, and shows it in the graph. If no branch on screen holds the commit,
 the branch with the most recent tip that does is turned on first.

@@ -10,6 +10,8 @@ export interface BranchInfo {
   target: string;
   tip_time: number;
   remote: string | null;
+  /// The working directory this branch is checked out in, if any.
+  checked_out: string | null;
 }
 
 export interface RefsResult {
