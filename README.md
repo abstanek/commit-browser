@@ -114,7 +114,9 @@ Repeat `--repo` to serve several at once, or hand it a directory they sit in:
 ```
 
 `--repo-dir` takes every repository directly inside that directory and no
-deeper, so a workspace can be served without naming its contents. Worktrees are
+deeper, so a workspace can be served without naming its contents. A bare
+repository is served like any other, named for its directory, for example
+`firmware.git`. Worktrees are
 understood: several checkouts of one repository appear once, as the checkout it
 was made in. Both flags repeat and can be mixed; a repository reached more than
 one way is still one entry.
