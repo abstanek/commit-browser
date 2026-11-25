@@ -679,3 +679,64 @@ fn a_branch_says_where_it_is_checked_out() {
         "its worktree is detached, which counts as nowhere"
     );
 }
+
+/// A bare repository has no working directory, so everything must come from
+/// the object store and the refs alone.
+#[test]
+fn a_bare_repository_reads_like_any_other() {
+    let dir = TempDir::new().unwrap();
+    let repo = Repository::init_bare(dir.path()).unwrap();
+    let sig = Signature::new("Test", "test@example.com", &Time::new(1_700_000_000, 0)).unwrap();
+    let blob = repo.blob(b"line one\nline two\n").unwrap();
+    let mut tb = repo.treebuilder(None).unwrap();
+    tb.insert("notes.txt", blob, 0o100644).unwrap();
+    let tree = repo.find_tree(tb.write().unwrap()).unwrap();
+    let first = repo
+        .commit(Some("refs/heads/main"), &sig, &sig, "first", &tree, &[])
+        .unwrap();
+    let parent = repo.find_commit(first).unwrap();
+    let second = repo
+        .commit(
+            Some("refs/heads/main"),
+            &sig,
+            &sig,
+            "second",
+            &tree,
+            &[&parent],
+        )
+        .unwrap();
+    repo.set_head("refs/heads/main").unwrap();
+    let path = dir.path().to_string_lossy().into_owned();
+
+    let info = open_repo(&path).unwrap();
+    assert_eq!(info.display_path, path.trim_end_matches('/'));
+    assert!(!info.is_worktree());
+
+    let refs = list_refs(&path).unwrap();
+    assert_eq!(refs.head_branch.as_deref(), Some("main"));
+    assert_eq!(refs.locals.len(), 1);
+    assert_eq!(
+        refs.locals[0].checked_out, None,
+        "nothing is checked out in a bare repository"
+    );
+
+    let g = graph(&path, &["refs/heads/main".to_string()], 10).unwrap();
+    assert_eq!(g.rows.len(), 2);
+    assert_eq!(g.rows[0].id, second.to_string());
+
+    let d = commit_details(&path, &first.to_string()).unwrap();
+    assert_eq!(d.files[0].path, "notes.txt");
+
+    let t = list_tree(&path, "main", "").unwrap();
+    assert_eq!(t.entries[0].name, "notes.txt");
+    assert_eq!(
+        read_file(&path, "main", "notes.txt").unwrap().text,
+        "line one\nline two\n"
+    );
+    assert_eq!(
+        find_commit(&path, &second.to_string()[..7])
+            .unwrap()
+            .branches,
+        ["refs/heads/main"]
+    );
+}
